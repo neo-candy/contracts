@@ -1,0 +1,82 @@
+{
+  "magic": 381296735,
+  "address-version": 53,
+  "consensus-nodes": [
+    {
+      "tcp-port": 40333,
+      "ws-port": 40334,
+      "rpc-port": 40332,
+      "wallet": {
+        "name": "node1",
+        "accounts": [
+          {
+            "private-key": "3155b497d1c271c168c35013e30f18d73dfce73df34f31ddfff050b4b73e1870",
+            "script-hash": "NdKmfWgMoBCWNmNd1BqK4ugsFaZh7uBoZD",
+            "label": null,
+            "is-default": true,
+            "contract": {
+              "script": "0c21025b35f19323ce450663f884726acc107d8fbbac8591c52dbcb5838cbe2e37195f4156e7b327",
+              "parameters": [
+                "Signature"
+              ]
+            }
+          },
+          {
+            "private-key": "3155b497d1c271c168c35013e30f18d73dfce73df34f31ddfff050b4b73e1870",
+            "script-hash": "NaAmKaivfZsypHgwEvb6jZPr7v4qiAyczz",
+            "label": "Consensus MultiSigContract",
+            "is-default": false,
+            "contract": {
+              "script": "110c21025b35f19323ce450663f884726acc107d8fbbac8591c52dbcb5838cbe2e37195f11419ed0dc3a",
+              "parameters": [
+                "Signature"
+              ]
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "wallets": [
+    {
+      "name": "Alice",
+      "accounts": [
+        {
+          "private-key": "3190629a16b3e255ed03718a1298d025944f46fe82b8eed31e4567cbca156d9b",
+          "script-hash": "NQcSTBwSJs7hcFUZzku2QdPNLe2dkTGok2",
+          "label": null,
+          "is-default": true,
+          "contract": {
+            "script": "0c2102d44ba0a616563f835845c695dd5edef4f206006f9514155a5d47116f9e5ee2ee4156e7b327",
+            "parameters": [
+              "Signature"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Bob",
+      "accounts": [
+        {
+          "private-key": "3eacb0ee4379769fa0443511d953bf1ae211a24469334f3bd9290671744f825f",
+          "script-hash": "NhsVB4etFffHjpLoj2ngVkkfNbtxiSSmbk",
+          "label": null,
+          "is-default": true,
+          "contract": {
+            "script": "0c21020bbc93f5cb4095572682b1802641f90df4069c03b49f5af227f619f170d506094156e7b327",
+            "parameters": [
+              "Signature"
+            ]
+          }
+        }
+      ]
+    }
+  ],
+   "settings": {
+    "rpc.MaxGasInvoke": "100000",
+    "rpc.MaxFee": "0.2",
+    "rpc.BindAddress": "0.0.0.0",
+    "chain.SecondsPerBlock": "1"
+  }
+}
