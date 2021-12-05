@@ -31,7 +31,7 @@ public class NeoCandy {
     @DisplayName("Transfer")
     static Event3Args<Hash160, Hash160, Integer> onTransfer;
 
-    private static final int INITIAL_SUPPLY = stringToInt("1000000000000000000");
+    private static final int INITIAL_SUPPLY = stringToInt("9000000000000000000");
 
     private static final int DECIMALS = 9;
 
