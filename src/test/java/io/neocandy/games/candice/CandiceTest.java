@@ -5,7 +5,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.extension.RegisterExtension;
 
 import io.neocandy.games.Candice;
-import io.neocandy.token.NeoCandy;
+import io.neocandy.tokens.nep17.NeoCandy;
 import io.neow3j.contract.FungibleToken;
 import io.neow3j.contract.SmartContract;
 import io.neow3j.protocol.Neow3j;
@@ -33,6 +33,7 @@ public abstract class CandiceTest {
 
     protected static Account alice;
     protected static Account bob;
+    protected static Account charlie;
 
     @RegisterExtension
     protected static ContractTestExtension ext = new ContractTestExtension();
@@ -46,6 +47,7 @@ public abstract class CandiceTest {
         neow3j = ext.getNeow3j();
         alice = ext.getAccount("NQcSTBwSJs7hcFUZzku2QdPNLe2dkTGok2");
         bob = ext.getAccount("NhsVB4etFffHjpLoj2ngVkkfNbtxiSSmbk");
+        charlie = ext.getAccount("NdbtgSku2qLuwsBBzLx3FLtmmMdm32Ktor");
         contract = ext.getDeployedContract(Candice.class);
         token = new FungibleToken(ext.getDeployedContract(NeoCandy.class).getScriptHash(), neow3j);
 

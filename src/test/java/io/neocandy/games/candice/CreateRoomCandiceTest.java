@@ -15,7 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 
 import io.neocandy.games.Candice;
-import io.neocandy.token.NeoCandy;
+import io.neocandy.tokens.nep17.NeoCandy;
 import io.neow3j.contract.GasToken;
 
 import io.neow3j.protocol.core.response.NeoInvokeFunction;

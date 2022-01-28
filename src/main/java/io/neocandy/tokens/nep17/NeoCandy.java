@@ -1,4 +1,4 @@
-package io.neocandy.token;
+package io.neocandy.tokens.nep17;
 
 import static io.neow3j.devpack.StringLiteralHelper.stringToInt;
 

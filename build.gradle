@@ -28,8 +28,9 @@ tasks.withType(Test) {
 test {
     testLogging.showStandardStreams = true
 }
+
 ext {
-   javaMainClass = "io.neocandy.deployment.CompileAndDeploy"
+   javaMainClass = "io.neocandy.deployment.CompileAndUpdate"
 }
 
 application {

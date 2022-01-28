@@ -82,7 +82,7 @@ public class Candice {
         byte[] key = getGameKey(p1, p2);
         int stake = games.get(key).toIntOrZero();
         assert stake > 0 : "game does not exist";
-
+        games.delete(key);
         int a = Runtime.getRandom() % 10;
         int b = Runtime.getRandom() % 10;
         Hash160 result = Hash160.zero();
@@ -117,7 +117,7 @@ public class Candice {
 
     @Safe
     public static int getRooms() {
-        return 1;
+        return 2;
     }
 
     @OnDeployment
