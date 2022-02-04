@@ -28,7 +28,7 @@ public class CandylandGame {
     private static final byte[] USERNAME_KEY = Helper.toByteArray((byte) 3);
     private static final StorageContext ctx = Storage.getStorageContext();
 
-    private static final StorageMap usernames = ctx.createMap(USERNAMES_PREFIX);
+    private static final StorageMap usernames = new StorageMap(ctx, USERNAMES_PREFIX);
 
     public static void register(String username, Hash160 owner) {
         assert owner != null : "Owner cannot be null";
@@ -38,9 +38,9 @@ public class CandylandGame {
         assert Runtime.checkWitness(owner) : "No authorization";
         assert usernames.get(username) == null : "Username already taken";
 
-        StorageMap ownerMap = ctx.createMap(owner.toByteArray());
+        StorageMap ownerMap = new StorageMap(ctx, owner.toByteArray());
         assert ownerMap.get(USERNAME_KEY) == null : "Address already has a username";
-        ctx.createMap(owner.toByteArray()).put(USERNAME_KEY, username);
+        new StorageMap(ctx, owner.toByteArray()).put(USERNAME_KEY, username);
         usernames.put(username, owner);
     }
 
@@ -58,7 +58,7 @@ public class CandylandGame {
 
     @Safe
     public static String getUsername(Hash160 owner) {
-        ByteString result = ctx.createMap(owner.toByteArray()).get(USERNAME_KEY);
+        ByteString result = new StorageMap(ctx, owner.toByteArray()).get(USERNAME_KEY);
         return result != null ? result.toString() : "";
     }
 

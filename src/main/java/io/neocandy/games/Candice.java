@@ -41,10 +41,10 @@ public class Candice {
     private static final StorageContext ctx = Storage.getStorageContext();
 
     private static final byte[] ROOMS_PREFIX = Helper.toByteArray((byte) 3);
-    private static final StorageMap rooms = ctx.createMap(ROOMS_PREFIX);
+    private static final StorageMap rooms = new StorageMap(ctx, ROOMS_PREFIX);
 
     private static final byte[] GAMES_PREFIX = Helper.toByteArray((byte) 4);
-    private static final StorageMap games = ctx.createMap(GAMES_PREFIX);
+    private static final StorageMap games = new StorageMap(ctx, GAMES_PREFIX);
 
     /**
      * 

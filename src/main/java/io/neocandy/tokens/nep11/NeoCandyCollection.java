@@ -1,7 +1,5 @@
 package io.neocandy.tokens.nep11;
 
-import static io.neow3j.devpack.StringLiteralHelper.addressToScriptHash;
-
 import io.neow3j.devpack.ByteString;
 import io.neow3j.devpack.Contract;
 import io.neow3j.devpack.Hash160;
@@ -35,25 +33,25 @@ public class NeoCandyCollection {
     static final byte[] totalSupplyKey = Helper.toByteArray((byte) 2);
 
     static final byte[] registryPrefix = Helper.toByteArray((byte) 3);
-    static final StorageMap registryMap = ctx.createMap(registryPrefix);
+    static final StorageMap registryMap = new StorageMap(ctx, registryPrefix);
 
     static final byte[] ownerOfKey = Helper.toByteArray((byte) 4);
-    static final StorageMap ownerOfMap = ctx.createMap(ownerOfKey);
+    static final StorageMap ownerOfMap = new StorageMap(ctx, ownerOfKey);
 
-    static final StorageMap contractMap = ctx.createMap((byte) 5);
+    static final StorageMap contractMap = new StorageMap(ctx, (byte) 5);
 
     static final String propName = "name";
     static final String propDescription = "description";
     static final String propImage = "image";
     static final String propTokenURI = "tokenURI";
 
-    static final StorageMap propertiesNameMap = ctx.createMap((byte) 12);
-    static final StorageMap propertiesDescriptionMap = ctx.createMap((byte) 13);
-    static final StorageMap propertiesImageMap = ctx.createMap((byte) 14);
-    static final StorageMap propertiesTokenURIMap = ctx.createMap((byte) 15);
+    static final StorageMap propertiesNameMap = new StorageMap(ctx, (byte) 12);
+    static final StorageMap propertiesDescriptionMap = new StorageMap(ctx, (byte) 13);
+    static final StorageMap propertiesImageMap = new StorageMap(ctx, (byte) 14);
+    static final StorageMap propertiesTokenURIMap = new StorageMap(ctx, (byte) 15);
 
     static final byte[] balanceKey = Helper.toByteArray((byte) 20);
-    static final StorageMap balanceMap = ctx.createMap(balanceKey);
+    static final StorageMap balanceMap = new StorageMap(ctx, balanceKey);
 
     static final byte[] tokensOfKey = Helper.toByteArray((byte) 24);
 
@@ -85,7 +83,7 @@ public class NeoCandyCollection {
 
     @Safe
     public static int totalSupply() {
-        return contractMap.getInteger(totalSupplyKey);
+        return contractMap.getInt(totalSupplyKey);
     }
 
     @Safe
@@ -107,8 +105,8 @@ public class NeoCandyCollection {
         assert Runtime.checkWitness(owner) : "No authorization";
 
         ownerOfMap.put(tokenId, to.toByteArray());
-        ctx.createMap(createTokensOfPrefix(owner)).delete(tokenId);
-        ctx.createMap(createTokensOfPrefix(to)).put(tokenId, 1);
+        new StorageMap(ctx, createTokensOfPrefix(owner)).delete(tokenId);
+        new StorageMap(ctx, createTokensOfPrefix(to)).put(tokenId, 1);
 
         decrementBalanceByOne(owner);
         incrementBalanceByOne(to);
@@ -164,7 +162,7 @@ public class NeoCandyCollection {
 
         registryMap.put(tokenId, tokenId);
         ownerOfMap.put(tokenId, owner.toByteArray());
-        ctx.createMap(createTokensOfPrefix(owner)).put(tokenId, 1);
+        new StorageMap(ctx, createTokensOfPrefix(owner)).put(tokenId, 1);
 
         incrementBalanceByOne(owner);
         incrementTotalSupplyByOne();
@@ -173,10 +171,7 @@ public class NeoCandyCollection {
 
     @Safe
     public static Iterator<Iterator.Struct<ByteString, ByteString>> tokens() {
-        return (Iterator<Iterator.Struct<ByteString, ByteString>>) Storage.find(
-                ctx.asReadOnly(),
-                registryPrefix,
-                FindOptions.RemovePrefix);
+        return (Iterator<Iterator.Struct<ByteString, ByteString>>) registryMap.find(FindOptions.RemovePrefix);
     }
 
     @Safe
@@ -219,12 +214,12 @@ public class NeoCandyCollection {
     }
 
     private static void incrementTotalSupplyByOne() {
-        int updatedTotalSupply = contractMap.getInteger(totalSupplyKey) + 1;
+        int updatedTotalSupply = contractMap.getInt(totalSupplyKey) + 1;
         contractMap.put(totalSupplyKey, updatedTotalSupply);
     }
 
     private static void decrementTotalSupplyByOne() {
-        int updatedTotalSupply = contractMap.getInteger(totalSupplyKey) - 1;
+        int updatedTotalSupply = contractMap.getInt(totalSupplyKey) - 1;
         contractMap.put(totalSupplyKey, updatedTotalSupply);
     }
 
@@ -239,7 +234,7 @@ public class NeoCandyCollection {
         propertiesImageMap.delete(tokenId);
         propertiesTokenURIMap.delete(tokenId);
         ownerOfMap.delete(tokenId);
-        ctx.createMap(createTokensOfPrefix(owner)).delete(tokenId);
+        new StorageMap(ctx, createTokensOfPrefix(owner)).delete(tokenId);
         decrementBalanceByOne(owner);
         decrementTotalSupplyByOne();
         return true;
@@ -251,6 +246,14 @@ public class NeoCandyCollection {
         }
         ContractManagement.destroy();
         return true;
+    }
+
+    public static void update(ByteString script, String manifest) throws Exception {
+        assert Runtime.checkWitness(contractOwner()) : "No authorization";
+        if (script.length() == 0 && manifest.length() == 0) {
+            throw new Exception("The new contract script and manifest must not be empty.");
+        }
+        ContractManagement.update(script, manifest);
     }
 
 }

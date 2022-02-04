@@ -40,7 +40,7 @@ public class NeoCandy {
     private static final byte[] OWNER_KEY = new byte[] { 0x03 };
 
     private static final StorageContext sc = Storage.getStorageContext();
-    private static final StorageMap assetMap = sc.createMap(PREFIX_ASSET);
+    private static final StorageMap assetMap = new StorageMap(sc, PREFIX_ASSET);
 
     public static String symbol() {
         return "CANDY";
@@ -51,7 +51,7 @@ public class NeoCandy {
     }
 
     public static int totalSupply() {
-        return Storage.getInteger(sc, TOTAL_SUPPLY_KEY);
+        return Storage.getInt(sc, TOTAL_SUPPLY_KEY);
     }
 
     public static boolean transfer(Hash160 from, Hash160 to, int amount, Object[] data) throws Exception {
