@@ -1,4 +1,4 @@
-package io.neocandy.games;
+package io.neocandy.games.candyland;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -17,7 +17,7 @@ import org.junit.jupiter.api.extension.RegisterExtension;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import io.neocandy.games.CandylandGame;
+import io.neocandy.games.candyland.CandylandGame;
 import io.neow3j.contract.SmartContract;
 import io.neow3j.protocol.Neow3j;
 import io.neow3j.protocol.core.response.NeoInvokeFunction;

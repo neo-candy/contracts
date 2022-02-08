@@ -17,6 +17,7 @@ import io.neow3j.devpack.constants.CallFlags;
 import io.neow3j.devpack.contracts.StdLib;
 import io.neow3j.devpack.events.Event1Arg;
 import io.neow3j.devpack.events.Event2Args;
+import io.neow3j.devpack.events.Event4Args;
 import io.neow3j.devpack.events.Event5Args;
 
 @ManifestExtra(key = "author", value = "NeoCandy")
@@ -36,6 +37,9 @@ public class SimpleVesting {
 
     @DisplayName("accountRegistered")
     private static Event1Arg<Hash160> onAccountRegistered;
+
+    @DisplayName("grantorRestrictionsSet")
+    private static Event4Args<Hash160, Integer, Integer, Integer> onGrantorRestrictionsSet;
 
     /*
      * See
@@ -68,10 +72,8 @@ public class SimpleVesting {
 
     /**
      * Immediately grants tokens to an address, including a portion that will vest
-     * over time
-     * according to a set vesting schedule. The overall duration and cliff duration
-     * of the grant must
-     * be an even multiple of the vesting interval.
+     * over time according to a set vesting schedule. The overall duration and cliff
+     * duration of the grant must be an even multiple of the vesting interval.
      *
      * @param beneficiary   = Address to which tokens will be granted.
      * @param totalAmount   = Total number of tokens to deposit into the account.
@@ -400,7 +402,7 @@ public class SimpleVesting {
      * @param grantHolder = The account to check.
      * @param onDay       = The day to check for, in days since the UNIX epoch.
      */
-    private static int _getAvailableAmount(Hash160 grantHolder, int onDay) {
+    private static int getAvailableAmount(Hash160 grantHolder, int onDay) {
         int totalTokens = balanceOf(grantHolder);
         int vested = totalTokens - getNotVestedAmount(grantHolder, onDay);
         return vested;
@@ -416,19 +418,13 @@ public class SimpleVesting {
      * @param onDay   = The day to check for, in days since the UNIX epoch.
      */
     private static boolean fundsAreAvailableOn(Hash160 account, int amount, int onDay) {
-        return (amount <= _getAvailableAmount(account, onDay));
+        return (amount <= getAvailableAmount(account, onDay));
     }
 
     /* HELPER FUNCTIONS */
 
     public static void transfer(Hash160 to, int amount) {
         onlyIfFundsAvailableNow(Runtime.getCallingScriptHash(), amount);
-        Contract.call(token(), "transfer", CallFlags.All,
-                new Object[] { Runtime.getExecutingScriptHash(), to, amount, null });
-    }
-
-    private static void safeTransfer(Hash160 to, int amount) {
-        onlyExistingAccount(to);
         Contract.call(token(), "transfer", CallFlags.All,
                 new Object[] { Runtime.getExecutingScriptHash(), to, amount, null });
     }
@@ -503,11 +499,6 @@ public class SimpleVesting {
         grantors.delete(account.toByteArray());
     }
 
-    @Safe
-    public static boolean isUniformGrantor(Hash160 account) {
-        return isGrantor(account) && grantors.getBoolean(account.toByteArray());
-    }
-
     private static void onlyExistingAccount(Hash160 account) {
         assert (isRegistered(account)) : "account not registered";
     }
@@ -523,11 +514,6 @@ public class SimpleVesting {
     private static void onlyGrantor() {
         assert (isGrantor(Runtime.getCallingScriptHash()) && callerIsSigner())
                 : "onlyGrantor";
-    }
-
-    private static void onlyUniformGrantor() {
-        assert (isUniformGrantor(Runtime.getCallingScriptHash())
-                && callerIsSigner()) : "onlyUniformGrantor";
     }
 
     /* CONTRACT */
