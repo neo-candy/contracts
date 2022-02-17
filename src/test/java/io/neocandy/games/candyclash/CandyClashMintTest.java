@@ -6,7 +6,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.io.IOException;
 import java.math.BigInteger;
 import java.util.Arrays;
 
@@ -47,16 +46,16 @@ public class CandyClashMintTest extends AbstractCandyClashTest {
                 log.info("====================== paginationTest() ======================");
                 TestHelper.mintNFT(gas, alice, BigInteger.valueOf(100_00000000L), candyClashNft, neow3j);
 
-                NeoInvokeFunction result = candyClashNft.callInvokeFunction(TestHelper.GET_GOOD_CANDIES,
+                NeoInvokeFunction result = candyClashNft.callInvokeFunction(TestHelper.GET_VILLAGER_CANDIES,
                                 Arrays.asList(ContractParameter.integer(5), ContractParameter.integer(30)),
                                 new Signer[] { AccountSigner.calledByEntry(alice) });
-                log.info("goodCandies: {}", result.getInvocationResult().getStack().get(0).getString());
+                log.info("villagerCandies: {}", result.getInvocationResult().getStack().get(0).getString());
 
-                result = candyClashNft.callInvokeFunction(TestHelper.GET_EVIL_CANDIES,
+                result = candyClashNft.callInvokeFunction(TestHelper.GET_VILLAIN_CANDIES,
                                 Arrays.asList(ContractParameter.integer(0), ContractParameter.integer(100)),
 
                                 new Signer[] { AccountSigner.calledByEntry(alice) });
-                log.info("evilCandies: {}", result.getInvocationResult().getStack().get(0).getString());
+                log.info("villainCandies: {}", result.getInvocationResult().getStack().get(0).getString());
         }
 
         @Test

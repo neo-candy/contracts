@@ -26,20 +26,20 @@ public class TestHelper {
     /* METHOD NAMES */
     // NFT CONTRACT
     protected static final String PROPERTIES = "properties";
-    protected static final String JSON_PROPERTIES = "jsonProperties";
+    protected static final String JSON_PROPERTIES = "propertiesJson";
     protected static final String UPDATE_PAUSE = "updatePause";
     protected static final String ROYALTIES = "getRoyalties";
     protected static final String TOKENS_OF = "tokensOf";
     protected static final String CONNECT_STAKING_CONTRACT = "updateStakingContract";
-    protected static final String TOTAL_EVIL_CANDIES_STAKED = "totalEvilCandiesStaked";
-    protected static final String GET_GOOD_CANDIES = "getGoodCandies";
-    protected static final String GET_EVIL_CANDIES = "getEvilCandies";
+    protected static final String TOTAL_VILLAIN_CANDIES_STAKED = "totalVillainCandiesStaked";
+    protected static final String GET_VILLAGER_CANDIES = "getVillagerCandies";
+    protected static final String GET_VILLAIN_CANDIES = "getVillainCandies";
 
     // STAKING CONTRACT
     protected static final String MAX_CANDIES_TO_EARN = "maxCandiesToEarn";
     protected static final String AVAILABLE_CLAIM_AMOUNT = "availableClaimAmount";
     protected static final String CLAIM = "claim";
-    protected static final String TOTAL_GOOD_CANDIES_STAKED = "totalGoodCandiesStaked";
+    protected static final String TOTAL_VILLAGER_CANDIES_STAKED = "totalVillagerCandiesStaked";
 
     protected static final Logger log = LoggerFactory.getLogger(TestHelper.class);
 
