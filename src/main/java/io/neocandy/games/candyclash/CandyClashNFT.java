@@ -27,6 +27,8 @@ import io.neow3j.devpack.events.Event2Args;
 import io.neow3j.devpack.events.Event3Args;
 import io.neow3j.devpack.events.Event4Args;
 
+import static io.neow3j.devpack.StringLiteralHelper.stringToInt;
+
 @ManifestExtra(key = "name", value = "CandyClashNFT Contract")
 @ManifestExtra(key = "author", value = "NeoCandy")
 @ManifestExtra(key = "description", value = "CandyClash NFT Collection")
@@ -508,21 +510,48 @@ public class CandyClashNFT {
         if (!update) {
             Storage.put(ctx, totalSupplyKey, 0);
             Object[] arr = (Object[]) data;
+
             Hash160 owner = (Hash160) arr[0];
             Helper.assertTrue(Hash160.isValid(owner));
             Storage.put(ctx, ownerkey, owner);
-            Storage.put(ctx, gasPriceKey, (int) arr[1]);
-            Storage.put(ctx, candyPriceKey, (int) arr[2]);
+
+            int gasPrice = (int) arr[1];
+            Helper.assertTrue(gasPrice >= 1_00000000);
+            Storage.put(ctx, gasPriceKey, gasPrice);
+
+            int candyPrice = (int) arr[2];
+            Helper.assertTrue(candyPrice >= stringToInt("500000000000"));
+            Storage.put(ctx, candyPriceKey, candyPrice);
+
             Hash160 candyHash = (Hash160) arr[3];
             Helper.assertTrue(Hash160.isValid(candyHash));
             Storage.put(ctx, candyHashKey, candyHash);
-            Storage.put(ctx, imageBaseUriKey, (String) arr[4]);
-            Storage.put(ctx, maxTokensAmountKey, (int) arr[5]);
-            Storage.put(ctx, maxGenesisAmountKey, (int) arr[6]);
+
+            String imageBaseURI = (String) arr[4];
+            Helper.assertTrue(imageBaseURI.length() > 0);
+            Storage.put(ctx, imageBaseUriKey, imageBaseURI);
+
+            int maxTokensAmount = (int) arr[5];
+            Helper.assertTrue(maxTokensAmount > 0);
+            Storage.put(ctx, maxTokensAmountKey, maxTokensAmount);
+
+            int maxGenesisAmount = (int) arr[6];
+            Helper.assertTrue(maxTokensAmount > 0 && maxGenesisAmount < maxTokensAmount);
+            Storage.put(ctx, maxGenesisAmountKey, maxGenesisAmount);
+
             Storage.put(ctx, isPausedKey, (int) arr[7]);
-            Storage.put(ctx, royaltiesReceiverKey, (String) arr[8]);
-            Storage.put(ctx, royaltiesAmountKey, (int) arr[9]);
-            Storage.put(ctx, maxMintAmountKey, (int) arr[10]);
+
+            String royaltiesReceiverAddress = (String) arr[8];
+            Helper.assertTrue(royaltiesReceiverAddress.length() > 0);
+            Storage.put(ctx, royaltiesReceiverKey, royaltiesReceiverAddress);
+
+            int royaltiesAmount = (int) arr[9];
+            Helper.assertTrue(royaltiesAmount > 0);
+            Storage.put(ctx, royaltiesAmountKey, royaltiesAmount);
+
+            int maxMintAmount = (int) arr[10];
+            Helper.assertTrue(maxMintAmount > 0 && maxMintAmount < 100);
+            Storage.put(ctx, maxMintAmountKey, maxMintAmount);
         }
     }
 

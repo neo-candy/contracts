@@ -51,11 +51,15 @@ public abstract class AbstractCandyClashTest {
      * DEPLOY_CONFIG
      */
     private static final int GAS_PRICE_PER_NFT = 10_00000000;
-    private static final int CANDY_PRICE_PER_NFT = 1_000000000;
+    private static final long CANDY_PRICE_PER_NFT = 500_000000000L;
     private static final int GENESIS_AMOUNT = 2000;
+    private static final int MAX_AMOUNT = 10000;
+    private static final int ROYALTIES_AMOUNT = 1000;
+    private static final int MAX_MINT_AMOUNT = 10;
     protected static final int MIN_STAKE_BLOCK_COUNT = 5; // 11520; // ~2 days
     private static final long DAILY_CANDY_RATE = 1000_000000000L;
     private static final int TAX_IN_PERCENT = 20;
+    private static final String IMAGE_BASE = "ipfs://Qmeqst3PBH9CQUxmZrcoT45HeGFVd89aUYrHN6vwFuhTDJ";
 
     @BeforeAll
     public static void setup() throws Exception {
@@ -98,14 +102,14 @@ public abstract class AbstractCandyClashTest {
         ContractParameter gasPrice = integer(GAS_PRICE_PER_NFT);
         ContractParameter candyPrice = integer(BigInteger.valueOf(CANDY_PRICE_PER_NFT));
         ContractParameter candy = hash160(ctx.getDeployedContract(NeoCandy.class).getScriptHash());
-        ContractParameter imageBase = string("ipfs://Qmeqst3PBH9CQUxmZrcoT45HeGFVd89aUYrHN6vwFuhTDJ");
-        ContractParameter maxTokens = integer(10000);
+        ContractParameter imageBase = string(IMAGE_BASE);
+        ContractParameter maxTokens = integer(MAX_AMOUNT);
         ContractParameter maxGenesis = integer(GENESIS_AMOUNT);
         ContractParameter isPaused = bool(false);
         ContractParameter royaltiesReceiverAddress = string(
                 ext.getAccount("NQcSTBwSJs7hcFUZzku2QdPNLe2dkTGok2").getAddress());
-        ContractParameter royaltiesAmount = integer(1000);
-        ContractParameter maxMintAmount = integer(10);
+        ContractParameter royaltiesAmount = integer(ROYALTIES_AMOUNT);
+        ContractParameter maxMintAmount = integer(MAX_MINT_AMOUNT);
         ContractParameter params = array(owner, gasPrice, candyPrice, candy, imageBase, maxTokens,
                 maxGenesis, isPaused, royaltiesReceiverAddress, royaltiesAmount, maxMintAmount);
         config.setDeployParam(params);
