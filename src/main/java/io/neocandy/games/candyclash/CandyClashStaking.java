@@ -19,13 +19,13 @@ import io.neow3j.devpack.annotations.Safe;
 import io.neow3j.devpack.constants.CallFlags;
 import io.neow3j.devpack.contracts.ContractManagement;
 import io.neow3j.devpack.contracts.LedgerContract;
-import io.neow3j.devpack.contracts.StdLib;
 import io.neow3j.devpack.events.Event1Arg;
 import io.neow3j.devpack.events.Event3Args;
 
 @ManifestExtra(key = "name", value = "CandyClash Staking")
 @ManifestExtra(key = "author", value = "NeoCandy")
 @ManifestExtra(key = "description", value = "CandyClash Staking Contract")
+@ManifestExtra(key = "email", value = "hello@neocandy.io")
 @Permission(contract = "*", methods = { "transfer", "balanceOf" })
 @Permission(contract = "0xfffdc93764dbaddd97c48f252a53ea4643faa3fd", methods = "*")
 public class CandyClashStaking {
@@ -39,11 +39,11 @@ public class CandyClashStaking {
     @DisplayName("onPayment")
     static Event3Args<Hash160, Integer, Object> onPayment;
 
-    @DisplayName("goodCandyClaim")
-    static Event3Args<ByteString, Integer, Boolean> onGoodCandyClaim;
+    @DisplayName("villagerCandyClaim")
+    static Event3Args<ByteString, Integer, Boolean> onVillagerCandyClaim;
 
-    @DisplayName("evilCandyClaim")
-    static Event3Args<ByteString, Integer, Boolean> onEvilCandyClaim;
+    @DisplayName("villainCandyClaim")
+    static Event3Args<ByteString, Integer, Boolean> onVillainCandyClaim;
 
     private static final int BLOCKS_PER_DAY = 4 * 60 * 24;
 
@@ -51,7 +51,7 @@ public class CandyClashStaking {
     private static final byte[] nftContractkey = Helper.toByteArray((byte) 2);
     private static final byte[] totalSugarStakedKey = Helper.toByteArray((byte) 3);
     private static final byte[] candyPerSugarKey = Helper.toByteArray((byte) 4);
-    private static final byte[] totalGoodCandiesStakedKey = Helper.toByteArray((byte) 5);
+    private static final byte[] totalVillagerCandiesStakedKey = Helper.toByteArray((byte) 5);
     private static final byte[] candiesContractKey = Helper.toByteArray((byte) 6);
     private static final byte[] pausedKey = Helper.toByteArray((byte) 7);
     private static final byte[] minStakeBlockCountKey = Helper.toByteArray((byte) 8);
@@ -60,11 +60,18 @@ public class CandyClashStaking {
     private static final byte[] lastClaimBlockIndexKey = Helper.toByteArray((byte) 11);
     private static final byte[] unaccountedRewardsKey = Helper.toByteArray((byte) 12);
     private static final byte[] taxAmountKey = Helper.toByteArray((byte) 13);
-    private static final byte[] totalEvilCandiesStakedKey = Helper.toByteArray((byte) 17);
+    private static final byte[] totalVillainCandiesStakedKey = Helper.toByteArray((byte) 17);
+
+    // CUSTOM METADATA
+    private static final String SUGAR = "sugar";
+    private static final String GENERATION = "generation";
+    private static final String TYPE = "type";
+    private static final String TYPE_VILLAIN = "Villain";
+    private static final String TYPE_VILLAGER = "Villager";
 
     private static final StorageContext ctx = Storage.getStorageContext();
-    private static final StorageMap evilCandies = new StorageMap(ctx, Helper.toByteArray((byte) 14));
-    private static final StorageMap goodCandies = new StorageMap(ctx, Helper.toByteArray((byte) 15));
+    private static final StorageMap villainCandies = new StorageMap(ctx, Helper.toByteArray((byte) 14));
+    private static final StorageMap villagerCandies = new StorageMap(ctx, Helper.toByteArray((byte) 15));
     private static final StorageMap ownerOfMap = new StorageMap(ctx, Helper.toByteArray((byte) 16));
 
     /* RECEIVING PAYMENTS */
@@ -82,11 +89,11 @@ public class CandyClashStaking {
         assert (Runtime.getCallingScriptHash() == nftContractHash()) : "invalid contract";
 
         Map<String, String> properties = getProperties(tokenId);
-        if (properties.get("class").equals("evil")) {
-            int sugar = Integer.valueOf(properties.get("sugar"));
-            addEvilCandy(sender, tokenId, sugar);
+        if (properties.get(TYPE).equals(TYPE_VILLAIN)) {
+            int sugar = Integer.valueOf(properties.get(SUGAR));
+            addVillainCandy(sender, tokenId, sugar);
         } else {
-            addGoodCandy(sender, tokenId);
+            addVillagerCandy(sender, tokenId);
         }
         ownerOfMap.put(tokenId, sender);
         onDebug.fire(Runtime.getCallingScriptHash());
@@ -101,11 +108,11 @@ public class CandyClashStaking {
             assert (Runtime.checkWitness(owner) && owner == receiver) : "not owner";
             assert (maxCandiesToEarn() > 0) : "no more candies to earn";
             Map<String, String> properties = getProperties(tokenIds[i]);
-            if (properties.get("class").equals("evil")) {
-                int sugar = Integer.valueOf(properties.get("sugar"));
-                claimAmount += claimEvilCandy(tokenIds[i], unstake, sugar, owner);
+            if (properties.get(TYPE).equals(TYPE_VILLAIN)) {
+                int sugar = Integer.valueOf(properties.get(SUGAR));
+                claimAmount += claimVillainCandy(tokenIds[i], unstake, sugar, owner);
             } else {
-                claimAmount += claimGoodCandy(tokenIds[i], unstake, owner);
+                claimAmount += claimVillagerCandy(tokenIds[i], unstake, owner);
             }
         }
         if (claimAmount == 0) {
@@ -115,23 +122,23 @@ public class CandyClashStaking {
         return claimAmount;
     }
 
-    private static void addEvilCandy(Hash160 owner, ByteString tokenId, int sugar) {
+    private static void addVillainCandy(Hash160 owner, ByteString tokenId, int sugar) {
         incrementTotalSugarStaked(sugar);
         int candyPerSugar = candyPerSugar();
-        updateEvilCandyStake(tokenId, candyPerSugar);
-        incrementTotalEvilCandiesStaked(1);
+        updateVillainCandyStake(tokenId, candyPerSugar);
+        incrementTotalVillainCandiesStaked(1);
         onTokenStaked.fire(owner, tokenId, candyPerSugar);
     }
 
-    private static void addGoodCandy(Hash160 owner, ByteString tokenId) {
+    private static void addVillagerCandy(Hash160 owner, ByteString tokenId) {
         updateEarnings();
-        updateGoodCandyStake(tokenId, currentBlockIndex());
-        incrementTotalGoodCandiesStaked(1);
+        updateVillagerCandyStake(tokenId, currentBlockIndex());
+        incrementTotalVillagerCandiesStaked(1);
         onTokenStaked.fire(owner, tokenId, LedgerContract.currentIndex());
     }
 
-    private static int claimGoodCandy(ByteString tokenId, boolean unstake, Hash160 owner) {
-        int stake = getGoodCandyStake(tokenId);
+    private static int claimVillagerCandy(ByteString tokenId, boolean unstake, Hash160 owner) {
+        int stake = getVillagerCandyStake(tokenId);
         assert !unstake && currentBlockIndex() - stake >= minStakeBlockCount() : "minimum stake duration not reached";
         int claimAmount = 0;
         if (totalCandiesEarned() < maxCandiesToEarn()) {
@@ -145,33 +152,33 @@ public class CandyClashStaking {
                 payTax(claimAmount);
                 claimAmount = 0;
             }
-            deleteGoodCandyStake(tokenId);
-            decrementTotalGoodCandiesStaked(1);
+            deleteVillagerCandyStake(tokenId);
+            decrementTotalVillagerCandiesStaked(1);
             deleteOwnerOfToken(tokenId);
             transferNFT(owner, tokenId);
         } else {
             int taxedAmount = claimAmount * taxAmount() / 100;
             payTax(taxedAmount);
             claimAmount = claimAmount - taxedAmount;
-            updateGoodCandyStake(tokenId, currentBlockIndex());
+            updateVillagerCandyStake(tokenId, currentBlockIndex());
         }
-        onGoodCandyClaim.fire(tokenId, claimAmount, unstake);
+        onVillagerCandyClaim.fire(tokenId, claimAmount, unstake);
         return claimAmount;
     }
 
-    private static int claimEvilCandy(ByteString tokenId, boolean unstake, int sugar, Hash160 owner) {
-        int stake = getEvilCandyStake(tokenId);
+    private static int claimVillainCandy(ByteString tokenId, boolean unstake, int sugar, Hash160 owner) {
+        int stake = getVillainCandyStake(tokenId);
         int claimAmount = sugar * (candyPerSugar() - stake);
         if (unstake) {
             decrementTotalSugarStaked(sugar);
-            deleteEvilCandyStake(tokenId);
-            decrementTotalEvilCandiesStaked(1);
+            deleteVillainCandyStake(tokenId);
+            decrementTotalVillainCandiesStaked(1);
             deleteOwnerOfToken(tokenId);
             transferNFT(owner, tokenId);
         } else {
-            updateEvilCandyStake(tokenId, candyPerSugar());
+            updateVillainCandyStake(tokenId, candyPerSugar());
         }
-        onEvilCandyClaim.fire(tokenId, claimAmount, unstake);
+        onVillainCandyClaim.fire(tokenId, claimAmount, unstake);
         return claimAmount;
     }
 
@@ -196,12 +203,12 @@ public class CandyClashStaking {
                 return 0;
             }
             Map<String, String> properties = getProperties(tokenIds[i]);
-            if (properties.get("class").equals("evil")) {
-                int sugar = Integer.valueOf(properties.get("sugar"));
-                int stake = getEvilCandyStake(tokenIds[i]);
+            if (properties.get(TYPE).equals(TYPE_VILLAIN)) {
+                int sugar = Integer.valueOf(properties.get(SUGAR));
+                int stake = getVillainCandyStake(tokenIds[i]);
                 claimAmount += sugar * (candyPerSugar() - stake);
             } else {
-                int stake = getGoodCandyStake(tokenIds[i]);
+                int stake = getVillagerCandyStake(tokenIds[i]);
                 if (totalCandiesEarned() < maxCandiesToEarn()) {
                     claimAmount += (currentBlockIndex() - stake) * dailyCandyRate() / BLOCKS_PER_DAY;
                 } else {
@@ -238,13 +245,13 @@ public class CandyClashStaking {
     }
 
     @Safe
-    public static int totalGoodCandiesStaked() {
-        return Storage.getIntOrZero(ctx, totalGoodCandiesStakedKey);
+    public static int totalVillagerCandiesStaked() {
+        return Storage.getIntOrZero(ctx, totalVillagerCandiesStakedKey);
     }
 
     @Safe
-    public static int totalEvilCandiesStaked() {
-        return Storage.getIntOrZero(ctx, totalEvilCandiesStakedKey);
+    public static int totalVillainCandiesStaked() {
+        return Storage.getIntOrZero(ctx, totalVillainCandiesStakedKey);
     }
 
     @Safe
@@ -290,52 +297,52 @@ public class CandyClashStaking {
         Storage.put(ctx, totalSugarStakedKey, totalSugarStaked() - amount);
     }
 
-    private static void incrementTotalGoodCandiesStaked(int amount) {
-        Storage.put(ctx, totalGoodCandiesStakedKey, totalGoodCandiesStaked() + amount);
+    private static void incrementTotalVillagerCandiesStaked(int amount) {
+        Storage.put(ctx, totalVillagerCandiesStakedKey, totalVillagerCandiesStaked() + amount);
     }
 
-    private static void decrementTotalGoodCandiesStaked(int amount) {
-        Storage.put(ctx, totalGoodCandiesStakedKey, totalGoodCandiesStaked() - amount);
+    private static void decrementTotalVillagerCandiesStaked(int amount) {
+        Storage.put(ctx, totalVillagerCandiesStakedKey, totalVillagerCandiesStaked() - amount);
     }
 
-    private static void incrementTotalEvilCandiesStaked(int amount) {
-        Storage.put(ctx, totalEvilCandiesStakedKey, totalGoodCandiesStaked() + amount);
+    private static void incrementTotalVillainCandiesStaked(int amount) {
+        Storage.put(ctx, totalVillainCandiesStakedKey, totalVillagerCandiesStaked() + amount);
     }
 
-    private static void decrementTotalEvilCandiesStaked(int amount) {
-        Storage.put(ctx, totalEvilCandiesStakedKey, totalGoodCandiesStaked() - amount);
+    private static void decrementTotalVillainCandiesStaked(int amount) {
+        Storage.put(ctx, totalVillainCandiesStakedKey, totalVillagerCandiesStaked() - amount);
     }
 
     private static void incrementTotalCandiesEarned(int amount) {
         Storage.put(ctx, totalCandiesEarnedKey, totalCandiesEarned() + amount);
     }
 
-    private static void updateEvilCandyStake(ByteString tokenId, int value) {
-        evilCandies.put(tokenId, value);
+    private static void updateVillainCandyStake(ByteString tokenId, int value) {
+        villainCandies.put(tokenId, value);
     }
 
-    private static void updateGoodCandyStake(ByteString tokenId, int value) {
-        goodCandies.put(tokenId, value);
+    private static void updateVillagerCandyStake(ByteString tokenId, int value) {
+        villagerCandies.put(tokenId, value);
     }
 
-    private static int getGoodCandyStake(ByteString tokenId) {
-        return goodCandies.getInt(tokenId);
+    private static int getVillagerCandyStake(ByteString tokenId) {
+        return villagerCandies.getInt(tokenId);
     }
 
-    private static int getEvilCandyStake(ByteString tokenId) {
-        return evilCandies.getInt(tokenId);
+    private static int getVillainCandyStake(ByteString tokenId) {
+        return villainCandies.getInt(tokenId);
     }
 
-    private static void deleteEvilCandyStake(ByteString tokenId) {
-        evilCandies.delete(tokenId);
+    private static void deleteVillainCandyStake(ByteString tokenId) {
+        villainCandies.delete(tokenId);
     }
 
     private static void deleteOwnerOfToken(ByteString tokenId) {
         ownerOfMap.delete(tokenId);
     }
 
-    private static void deleteGoodCandyStake(ByteString tokenId) {
-        goodCandies.delete(tokenId);
+    private static void deleteVillagerCandyStake(ByteString tokenId) {
+        villagerCandies.delete(tokenId);
     }
 
     private static int lastClaimBlockIndex() {
@@ -393,7 +400,7 @@ public class CandyClashStaking {
 
     private static void updateEarnings() {
         if (totalCandiesEarned() < maxCandiesToEarn()) {
-            int amount = (currentBlockIndex() - lastClaimBlockIndex()) * totalGoodCandiesStaked() * dailyCandyRate()
+            int amount = (currentBlockIndex() - lastClaimBlockIndex()) * totalVillagerCandiesStaked() * dailyCandyRate()
                     / BLOCKS_PER_DAY;
             incrementTotalCandiesEarned(amount);
             updateLastClaimBlockIndex(currentBlockIndex());

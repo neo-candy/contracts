@@ -30,7 +30,8 @@ import io.neow3j.devpack.events.Event4Args;
 @ManifestExtra(key = "name", value = "CandyClashNFT Contract")
 @ManifestExtra(key = "author", value = "NeoCandy")
 @ManifestExtra(key = "description", value = "CandyClash NFT Collection")
-@Permission(contract = "*", methods = { "totalEvilCandiesStaked", "onNEP11Payment" })
+@ManifestExtra(key = "email", value = "hello@neocandy.io")
+@Permission(contract = "*", methods = { "totalVillainCandiesStaked", "onNEP11Payment" })
 @Permission(contract = "0xfffdc93764dbaddd97c48f252a53ea4643faa3fd", methods = "*")
 public class CandyClashNFT {
 
@@ -96,8 +97,8 @@ public class CandyClashNFT {
     private static final StorageMap propertiesTokenURIMap = new StorageMap(ctx, (byte) 15);
     private static final StorageMap propertiesSugarMap = new StorageMap(ctx, (byte) 16);
     private static final StorageMap propertiesClassMap = new StorageMap(ctx, (byte) 17);
-    private static final StorageMap evilCandies = new StorageMap(ctx, (byte) 40);
-    private static final StorageMap goodCandies = new StorageMap(ctx, (byte) 41);
+    private static final StorageMap villainCandies = new StorageMap(ctx, (byte) 40);
+    private static final StorageMap villagerCandies = new StorageMap(ctx, (byte) 41);
 
     @OnNEP17Payment
     public static void onPayment(Hash160 from, int amount, Object data) throws Exception {
@@ -243,15 +244,16 @@ public class CandyClashNFT {
         if (gen == 1) {
             boolean steal = Runtime.getRandom() % 10 == 0;
             if (steal) {
-                owner = randomEvilCandyOwner();
+                Hash160 newOwner = randomVillainCandyOwner();
+                owner = newOwner != null ? newOwner : owner;
             }
         }
         if (Runtime.getRandom() % 10 == 9) {
-            properties.put(TYPE, "evil");
-            evilCandies.put(tokenId, owner);
+            properties.put(TYPE, TYPE_VILLAIN);
+            villainCandies.put(tokenId, owner);
         } else {
-            properties.put(TYPE, "good");
-            goodCandies.put(tokenId, owner);
+            properties.put(TYPE, TYPE_VILLAGER);
+            villagerCandies.put(tokenId, owner);
         }
         updateProperties(properties, tokenId);
         tokens.put(tokenId, tokenId);
@@ -261,10 +263,10 @@ public class CandyClashNFT {
         onMint.fire(owner, tokenId);
     }
 
-    private static Hash160 randomEvilCandyOwner() throws Exception {
-        // random value between 0 and totalEvilCandiesStaked
-        int rand = (Runtime.getRandom() & 0xFFFFFFFF) % totalEvilCandiesStaked();
-        Iterator<ByteString> iter = evilCandies.find(FindOptions.ValuesOnly);
+    private static Hash160 randomVillainCandyOwner() throws Exception {
+        // random value between 0 and totalVillainCandiesStaked
+        int rand = (Runtime.getRandom() & 0xFFFFFFFF) % totalVillainCandiesStaked();
+        Iterator<ByteString> iter = villainCandies.find(FindOptions.ValuesOnly);
         int count = 0;
         while (iter.next()) {
             if (count == rand) {
@@ -272,12 +274,12 @@ public class CandyClashNFT {
             }
             count++;
         }
-        // it should always find someone
-        throw new Exception("randomEvilCandyOwner");
+        // when no villain candy is staked at this moment
+        return null;
     }
 
-    private static int totalEvilCandiesStaked() {
-        return (int) Contract.call(stakingContract(), "totalEvilCandiesStaked", CallFlags.All, new Object[0]);
+    private static int totalVillainCandiesStaked() {
+        return (int) Contract.call(stakingContract(), "totalVillainCandiesStaked", CallFlags.All, new Object[0]);
     }
 
     private static Hash160 stakingContract() {
@@ -365,7 +367,7 @@ public class CandyClashNFT {
     }
 
     @Safe
-    public static String jsonProperties(ByteString tokenId) throws Exception {
+    public static String propertiesJson(ByteString tokenId) throws Exception {
         Map<String, Object> p = new Map<>();
         String tokenName = propertiesNameMap.getString(tokenId);
         if (tokenName == null) {
@@ -446,9 +448,9 @@ public class CandyClashNFT {
 
     /* OWNER ONLY METHODS */
 
-    public static String getGoodCandies(int from, int size) {
+    public static String getVillagerCandies(int from, int size) {
         onlyOwner();
-        Iterator<Struct<ByteString, ByteString>> iterator = goodCandies.find(FindOptions.RemovePrefix);
+        Iterator<Struct<ByteString, ByteString>> iterator = villagerCandies.find(FindOptions.RemovePrefix);
         List<Integer> result = new List<>();
         int count = 0;
         while (iterator.next() && result.size() != size) {
@@ -460,9 +462,9 @@ public class CandyClashNFT {
         return StdLib.jsonSerialize(result);
     }
 
-    public static String getEvilCandies(int from, int size) {
+    public static String getVillainCandies(int from, int size) {
         onlyOwner();
-        Iterator<Struct<ByteString, ByteString>> iterator = evilCandies.find(FindOptions.RemovePrefix);
+        Iterator<Struct<ByteString, ByteString>> iterator = villainCandies.find(FindOptions.RemovePrefix);
         List<Integer> result = new List<>();
         int count = 0;
         while (iterator.next() && result.size() != size) {
