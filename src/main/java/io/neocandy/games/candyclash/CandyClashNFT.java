@@ -99,8 +99,6 @@ public class CandyClashNFT {
     private static final StorageMap evilCandies = new StorageMap(ctx, (byte) 40);
     private static final StorageMap goodCandies = new StorageMap(ctx, (byte) 41);
 
-    // TODO: steal non genesis
-    // TODO: store newly minted ids, so images can be uploaded
     @OnNEP17Payment
     public static void onPayment(Hash160 from, int amount, Object data) throws Exception {
         assert (!isPaused()) : "isPaused";
