@@ -30,6 +30,8 @@ public class TestHelper {
     protected static final String UPDATE_PAUSE = "updatePause";
     protected static final String ROYALTIES = "getRoyalties";
     protected static final String TOKENS_OF = "tokensOf";
+    protected static final String OWNER_OF = "ownerOf";
+    protected static final String TOKENS_OF_JSON = "tokensOfJson";
     protected static final String CONNECT_STAKING_CONTRACT = "updateStakingContract";
     protected static final String TOTAL_VILLAIN_CANDIES_STAKED = "totalVillainCandiesStaked";
     protected static final String GET_VILLAGER_CANDIES = "getVillagerCandies";
@@ -54,7 +56,7 @@ public class TestHelper {
             throw new Exception(res.getError().getMessage());
         }
         Await.waitUntilTransactionIsExecuted(res.getSendRawTransaction().getHash(), neow3j);
-        log.info("transfer17 success: {}\n", tx.getApplicationLog().getExecutions().get(0));
+        log.info("{} transfer success: {}\n", token.getSymbol(), tx.getApplicationLog().getExecutions().get(0));
     }
 
     protected static void transfer11(

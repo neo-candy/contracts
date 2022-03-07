@@ -50,12 +50,13 @@ public abstract class AbstractCandyClashTest {
     /**
      * DEPLOY_CONFIG
      */
-    private static final int GAS_PRICE_PER_NFT = 10_00000000;
+    protected static final int GAS_PRICE_PER_NFT = 5_00000000;
     private static final long CANDY_PRICE_PER_NFT = 500_000000000L;
     private static final int GENESIS_AMOUNT = 2000;
     private static final int MAX_AMOUNT = 10000;
     private static final int ROYALTIES_AMOUNT = 1000;
     private static final int MAX_MINT_AMOUNT = 10;
+    protected static final long INITIAL_CANDY_AMOUNT = 100000000000000L;
     protected static final int MIN_STAKE_BLOCK_COUNT = 5; // 11520; // ~2 days
     private static final long DAILY_CANDY_RATE = 1000_000000000L;
     private static final int TAX_IN_PERCENT = 20;
@@ -73,10 +74,13 @@ public abstract class AbstractCandyClashTest {
         candyClashNft = new SmartContract(ext.getDeployedContract(CandyClashNFT.class).getScriptHash(),
                 ext.getNeow3j());
         try {
+
+            // send candy from alice to bob
             transfer17(candyToken, alice, bob.getScriptHash(), BigInteger.valueOf(100L), null, neow3j);
 
-            // send candy to staking contract
-            transfer17(candyToken, alice, candyClashStaking.getScriptHash(), BigInteger.valueOf(100000_000000000L),
+            // send candy from alice to staking contract
+            transfer17(candyToken, alice, candyClashStaking.getScriptHash(),
+                    BigInteger.valueOf(INITIAL_CANDY_AMOUNT),
                     null, neow3j);
 
             TestHelper.invokeWrite(candyClashNft, TestHelper.CONNECT_STAKING_CONTRACT,
@@ -125,8 +129,9 @@ public abstract class AbstractCandyClashTest {
         ContractParameter candy = hash160(ctx.getDeployedContract(NeoCandy.class).getScriptHash());
         ContractParameter dailyCandyRate = integer(BigInteger.valueOf(DAILY_CANDY_RATE));
         ContractParameter tax = integer(TAX_IN_PERCENT);
+        ContractParameter isPaused = bool(false);
         config.setDeployParam(
-                ContractParameter.array(owner, nftContract, minStakeBlockCount, candy, dailyCandyRate, tax));
+                ContractParameter.array(owner, nftContract, minStakeBlockCount, candy, dailyCandyRate, tax, isPaused));
         return config;
     }
 }

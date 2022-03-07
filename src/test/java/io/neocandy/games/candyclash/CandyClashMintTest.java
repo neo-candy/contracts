@@ -6,9 +6,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.IOException;
 import java.math.BigInteger;
 import java.util.Arrays;
 
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 
@@ -27,38 +29,51 @@ import io.neow3j.types.ContractParameter;
 public class CandyClashMintTest extends AbstractCandyClashTest {
 
         @Test
-        void mintTest() throws Throwable {
+        @Disabled
+        void mintTest() throws IOException {
+                long times = 1;
                 log.info("====================== mintTest() ======================");
-                TestHelper.mintNFT(gas, alice, BigInteger.valueOf(100_00000000L), candyClashNft, neow3j);
+                log.info("alice gas balance: {}", gas.getBalanceOf(alice));
+                assertDoesNotThrow(() -> TestHelper.mintNFT(gas, alice, BigInteger.valueOf(times * 1000000000L),
+                                candyClashNft,
+                                neow3j));
+
                 byte[] tokenId = new byte[] { (byte) 1 };
                 NeoInvokeFunction result = candyClashNft.callInvokeFunction(TestHelper.JSON_PROPERTIES,
                                 Arrays.asList(ContractParameter.byteArray(tokenId)));
                 assertNull(result.getInvocationResult().getException());
-
+                log.info("jsonProperties: {}",
+                                result.getInvocationResult().getStack().get(0).getString());
                 result = candyClashNft.callInvokeFunction(TestHelper.TOKENS_OF,
                                 Arrays.asList(ContractParameter.hash160(alice)));
-                assertEquals(10, result.getInvocationResult().getStack().get(0).getIterator().size());
+                assertEquals(times,
+                                result.getInvocationResult().getStack().get(0).getIterator().size());
+
         }
 
-        @Test
         @RepeatedTest(value = 10)
+        @Disabled
         void paginationTest() throws Throwable {
                 log.info("====================== paginationTest() ======================");
-                TestHelper.mintNFT(gas, alice, BigInteger.valueOf(100_00000000L), candyClashNft, neow3j);
+                TestHelper.mintNFT(gas, alice, BigInteger.valueOf(100_00000000L),
+                                candyClashNft, neow3j);
 
                 NeoInvokeFunction result = candyClashNft.callInvokeFunction(TestHelper.GET_VILLAGER_CANDIES,
-                                Arrays.asList(ContractParameter.integer(5), ContractParameter.integer(30)),
+                                Arrays.asList(ContractParameter.integer(0), ContractParameter.integer(30)),
                                 new Signer[] { AccountSigner.calledByEntry(alice) });
-                log.info("villagerCandies: {}", result.getInvocationResult().getStack().get(0).getString());
+                log.info("villagerCandies: {}",
+                                result.getInvocationResult().getStack().get(0).getString());
 
                 result = candyClashNft.callInvokeFunction(TestHelper.GET_VILLAIN_CANDIES,
                                 Arrays.asList(ContractParameter.integer(0), ContractParameter.integer(100)),
 
                                 new Signer[] { AccountSigner.calledByEntry(alice) });
-                log.info("villainCandies: {}", result.getInvocationResult().getStack().get(0).getString());
+                log.info("villainCandies: {}",
+                                result.getInvocationResult().getStack().get(0).getString());
         }
 
         @Test
+        @Disabled
         void mintAmountReachedTest() {
                 log.info("====================== mintAmountReachedTest() ======================");
                 Exception ex = assertThrows(Exception.class, () -> TestHelper.mintNFT(gas, alice,
@@ -68,6 +83,7 @@ public class CandyClashMintTest extends AbstractCandyClashTest {
         }
 
         @Test
+        @Disabled
         void invalidAmountTest() {
                 log.info("====================== invalidAmountTest() ======================");
                 Exception ex = assertThrows(Exception.class, () -> TestHelper.mintNFT(gas, alice,
@@ -77,6 +93,7 @@ public class CandyClashMintTest extends AbstractCandyClashTest {
         }
 
         @Test
+        @Disabled
         void invalidTokenTest() {
                 log.info("====================== invalidTokenTest() ======================");
                 FungibleToken neo = new NeoToken(neow3j);
@@ -89,6 +106,7 @@ public class CandyClashMintTest extends AbstractCandyClashTest {
         }
 
         @Test
+        @Disabled
         void candyPaymentNotAvailableTest() {
                 log.info("====================== candyPaymentNotAvailableTest() ======================");
                 Exception ex = assertThrows(Exception.class,
@@ -99,6 +117,7 @@ public class CandyClashMintTest extends AbstractCandyClashTest {
         }
 
         @Test
+        @Disabled
         void pauseTest() throws Throwable {
                 log.info("====================== pauseTest() ======================");
                 assertDoesNotThrow(() -> TestHelper.invokeWrite(candyClashNft, TestHelper.UPDATE_PAUSE,
@@ -111,12 +130,26 @@ public class CandyClashMintTest extends AbstractCandyClashTest {
         }
 
         @Test
+        @Disabled
         void royaltiesTest() throws Throwable {
                 log.info("====================== royaltiesTest() ======================");
                 NeoInvokeFunction result = candyClashNft.callInvokeFunction(TestHelper.ROYALTIES);
                 assertNull(result.getInvocationResult().getException());
 
                 log.info("royalties: {}", result.getInvocationResult().getStack().get(0).getString());
+        }
+
+        @Test
+        void ownerOfTest() throws Throwable {
+                log.info("====================== ownerOfTest() ======================");
+                TestHelper.mintNFT(gas, bob,
+                                BigInteger.valueOf(GAS_PRICE_PER_NFT), candyClashNft, neow3j);
+
+                NeoInvokeFunction result = candyClashNft.callInvokeFunction(TestHelper.OWNER_OF,
+                                Arrays.asList(ContractParameter.byteArray(new byte[] { (byte) 1 })));
+
+                log.info("ownerOf2: {}", result.getInvocationResult().getStack().get(0));
+
         }
 
 }
