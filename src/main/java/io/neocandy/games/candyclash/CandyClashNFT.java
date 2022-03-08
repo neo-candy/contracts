@@ -70,11 +70,13 @@ public class CandyClashNFT {
     private static final String PROPERTY_HAS_LOCKED = "has_locked";
     private static final String PROPERTY_TYPE = "type";
     private static final int PROPERTY_GAME_TYPE = 4;
+
     // NFT attributes
     private static final String ATTRIBUTES = "attributes";
     private static final String ATTRIBUTE_TRAIT_TYPE = "trait_type";
     private static final String ATTRIBUTE_VALUE = "value";
     private static final String ATTRIBUTE_DISPLAY_TYPE = "display_type";
+
     // ROYALTIES
     private static final String ROYALTIES_ADDRESS = "address";
     private static final String ROYALTIES_VALUE = "value";
@@ -111,43 +113,18 @@ public class CandyClashNFT {
     private static final StorageMap villainCandies = new StorageMap(ctx, (byte) 40);
     private static final StorageMap villagerCandies = new StorageMap(ctx, (byte) 19);
 
-    /*
-     * @OnNEP17Payment
-     * public static void onPayment(Hash160 from, int amount, Object data) throws
-     * Exception {
-     * assert (!isPaused()) : "isPaused";
-     * assert (stakingContract() != null) : "missing staking contract";
-     * assert (totalSupply() < maxTokensAmount()) : "sold out";
-     * Hash160 token = Runtime.getCallingScriptHash();
-     * assert (token == GasToken.getHash() || token == candyContract()) :
-     * "invalid token";
-     * if (token == GasToken.getHash()) {
+    /**
+     * When the amount of minted tokens is lower than maxGenesisAmount then accept
+     * only GAS else accept CANDY. Call the mint function with sender and generation
+     * parameter. Only when generation 0 nfts are sold out, generation 1 nfts can be
+     * minted.
      * 
-     * int gasPrice = gasPrice();
-     * int times = amount / gasPrice;
-     * assert (totalSupply() + times <= maxGenesisAmount()) : "not available";
-     * assert (times <= maxMintAmount()) : "mint amount reached";
-     * assert (times > 0 && amount % gasPrice == 0) : "invalid amount";
-     * for (int i = 0; i < times; i++) {
-     * mint(from, 0);
-     * }
-     * } else {
-     * int candyPrice = candyPrice();
-     * int times = amount / candyPrice;
-     * assert (totalSupply() > maxGenesisAmount() && totalSupply() + times <=
-     * maxTokensAmount()) : "not available";
-     * assert (times <= maxMintAmount()) : "mint amount reached";
-     * assert (times > 0 && amount % candyPrice == 0) : "invalid amount";
-     * for (int i = 0; i < times; i++) {
-     * mint(from, 1);
-     * }
-     * }
-     * onPayment.fire(from, amount, data);
-     * }
+     * @param from   has to be equal to sender address
+     * @param amount sent
+     * @param data   will be ignored
      */
-
     @OnNEP17Payment
-    public static void onPayment(Hash160 from, int amount, Object data) throws Exception {
+    public static void onPayment(Hash160 from, int amount, Object data) {
         assert (!isPaused()) : "isPaused";
         assert (stakingContract() != null) : "missing staking contract";
         assert (totalSupply() < maxTokensAmount()) : "sold out";
@@ -165,11 +142,18 @@ public class CandyClashNFT {
         onPayment.fire(from, amount, data);
     }
 
+    /* READ ONLY */
+
     @Safe
     public static Hash160 contractOwner() {
         return new Hash160(Storage.get(ctx, ownerkey));
     }
 
+    /**
+     * Required by NFT marketplaces that support royalties.
+     * 
+     * @return royalties data with receiverAddress and royaltiesAmount.
+     */
     @Safe
     public static String getRoyalties() {
         String receiverAddress = Storage.getString(ctx, royaltiesReceiverKey);
@@ -248,27 +232,6 @@ public class CandyClashNFT {
         return tokens;
     }
 
-    public static boolean transfer(Hash160 to, ByteString tokenId, Object data) throws Exception {
-        Hash160 owner = ownerOf(tokenId);
-        assert owner != null : "This token id does not exist";
-        assert Runtime.checkWitness(owner) : "No authorization";
-
-        ownerOfMap.put(tokenId, to.toByteArray());
-        new StorageMap(ctx, createTokensOfPrefix(owner)).delete(tokenId);
-        new StorageMap(ctx, createTokensOfPrefix(to)).put(tokenId, 1);
-
-        decrementBalanceByOne(owner);
-        incrementBalanceByOne(to);
-
-        onTransfer.fire(owner, to, 1, tokenId);
-
-        if (ContractManagement.getContract(to) != null) {
-            Contract.call(to, "onNEP11Payment", CallFlags.All,
-                    new Object[] { owner, 1, tokenId, data });
-        }
-        return true;
-    }
-
     @Safe
     public static Hash160 ownerOf(ByteString tokenId) {
         ByteString owner = ownerOfMap.get(tokenId);
@@ -276,133 +239,6 @@ public class CandyClashNFT {
             return null;
         }
         return new Hash160(owner);
-    }
-
-    private static void mint(Hash160 owner, String gen) throws Exception {
-        incrementTotalSupplyByOne();
-        int totalSupply = totalSupply();
-        String ts = StdLib.jsonSerialize(totalSupply);
-        ByteString tokenId = new ByteString(totalSupply);
-        Map<String, String> properties = new Map<>();
-        properties.put(NAME, "CandyClash Candy #" + ts);
-        properties.put(DESC, "CandyClash Candy NFT. Stake to earn $CANDY.");
-        properties.put(IMAGE, getImageBaseURI() + "/" + ts + ".png");
-        properties.put(TOKEN_URI, "");
-        properties.put(GENERATION, gen);
-        // there is a 10% chance that a new gen 1 mint can be stolen
-        if (gen == "1") {
-            boolean steal = Runtime.getRandom() % 10 == 0;
-            if (steal) {
-                Hash160 newOwner = randomVillainCandyOwner();
-                owner = newOwner != null ? newOwner : owner;
-            }
-        }
-        boolean isEvil = Runtime.getRandom() % 10 == 0;
-        if (isEvil) {
-            properties.put(SUGAR, "1"); // RANDOMIZE
-            properties.put(TYPE, TYPE_VILLAIN);
-            villainCandies.put(tokenId, owner);
-        } else {
-            properties.put(SUGAR, "4"); // RANDOMIZE
-            int randBonus = randomBonusAmount();
-            String bonus = StdLib.jsonSerialize(randBonus);
-            properties.put(BONUS, bonus);
-            properties.put(TYPE, TYPE_VILLAGER);
-            villagerCandies.put(tokenId, owner);
-        }
-
-        updateProperties(properties, tokenId);
-        tokens.put(tokenId, tokenId);
-        ownerOfMap.put(tokenId, owner);
-        new StorageMap(ctx, createTokensOfPrefix(owner)).put(tokenId, 1);
-        incrementBalanceByOne(owner);
-
-        onMint.fire(owner, tokenId);
-    }
-
-    private static int randomBonusAmount() {
-        int rand = randomNumberUntil(100);
-        int bonus = 0;
-        if (rand == 1) {
-            bonus = 100;
-        } else if (rand < 7) {
-            bonus = 50;
-        } else if (rand < 21) {
-            bonus = 35;
-        } else if (rand < 31) {
-            bonus = 20;
-        } else if (rand < 51) {
-            bonus = 10;
-        }
-        return bonus;
-    }
-
-    private static int randomNumberUntil(int max) {
-        Helper.assertTrue(max > 1);
-        return (Runtime.getRandom() & 0xFFFFFFFF) % max;
-    }
-
-    private static Hash160 randomVillainCandyOwner() throws Exception {
-        int rand = randomNumberUntil(totalVillainCandiesStaked());
-        Iterator<ByteString> iter = villainCandies.find(FindOptions.ValuesOnly);
-        int count = 0;
-        while (iter.next()) {
-            if (count == rand) {
-                return new Hash160(iter.get());
-            }
-            count++;
-        }
-        // when no villain candy is staked at this moment
-        return null;
-    }
-
-    private static int totalVillainCandiesStaked() {
-        return (int) Contract.call(stakingContract(), "totalVillainCandiesStaked", CallFlags.All, new Object[0]);
-    }
-
-    private static Hash160 stakingContract() {
-        return new Hash160(Storage.get(ctx, stakingContractKey));
-    }
-
-    private static byte[] createTokensOfPrefix(Hash160 owner) {
-        return Helper.concat(tokensOfKey, owner.toByteArray());
-    }
-
-    private static Hash160 candyContract() {
-        return new Hash160(Storage.get(ctx, candyHashKey));
-    }
-
-    private static void updateProperties(Map<String, String> properties, ByteString tokenId) {
-        assert properties.containsKey(NAME) : "missing name";
-        String tokenName = properties.get(NAME);
-        propertiesNameMap.put(tokenId, tokenName);
-
-        assert properties.containsKey(DESC) : "missing desc";
-        String tokenDesc = properties.get(DESC);
-        propertiesDescriptionMap.put(tokenId, tokenDesc);
-
-        assert properties.containsKey(IMAGE) : "missing img";
-        String tokenImg = properties.get(IMAGE);
-        propertiesImageMap.put(tokenId, tokenImg);
-
-        assert properties.containsKey(TOKEN_URI) : "missing uri";
-        String tokenUri = properties.get(TOKEN_URI);
-        propertiesTokenURIMap.put(tokenId, tokenUri);
-
-        assert properties.containsKey(SUGAR) : "missing sugar";
-        String sugarValue = properties.get(SUGAR);
-        propertiesSugarMap.put(tokenId, sugarValue);
-
-        assert properties.containsKey(TYPE) : "missing type";
-        String tokenType = properties.get(TYPE);
-        propertiesTypeMap.put(tokenId, tokenType);
-
-        if (tokenType == TYPE_VILLAGER) {
-            assert properties.containsKey(BONUS) : "missing claimBonus";
-            String bonus = properties.get(BONUS);
-            propertiesClaimBonusMap.put(tokenId, bonus);
-        }
-
     }
 
     @Safe
@@ -509,17 +345,239 @@ public class CandyClashNFT {
         return StdLib.jsonSerialize(p);
     }
 
+    /**
+     * Query all minted villager nfts, supports pagination.
+     * 
+     * @param from start index
+     * @param size list size
+     * @return list of minted villager nfts
+     */
+    @Safe
+    public static String getVillagerCandies(int from, int size) {
+        Iterator<Struct<ByteString, ByteString>> iterator = villagerCandies.find(FindOptions.RemovePrefix);
+        List<Integer> result = new List<>();
+        int count = 0;
+        while (iterator.next() && result.size() != size) {
+            if (count >= from) {
+                result.add(iterator.get().key.toInt());
+            }
+            count++;
+        }
+        return StdLib.jsonSerialize(result);
+    }
+
+    /**
+     * Query all minted villain nfts, supports pagination.
+     * 
+     * @param from start index
+     * @param size list size
+     * @return list of minted villain nfts
+     */
+    @Safe
+    public static String getVillainCandies(int from, int size) {
+        Iterator<Struct<ByteString, ByteString>> iterator = villainCandies.find(FindOptions.RemovePrefix);
+        List<Integer> result = new List<>();
+        int count = 0;
+        while (iterator.next() && result.size() != size) {
+            if (count >= from) {
+                result.add(iterator.get().key.toInt());
+            }
+            count++;
+        }
+        return StdLib.jsonSerialize(result);
+    }
+
+    /* READ & WRITE */
+
+    public static boolean transfer(Hash160 to, ByteString tokenId, Object data) throws Exception {
+        Hash160 owner = ownerOf(tokenId);
+        assert owner != null : "This token id does not exist";
+        assert Runtime.checkWitness(owner) : "No authorization";
+
+        ownerOfMap.put(tokenId, to.toByteArray());
+        new StorageMap(ctx, createTokensOfPrefix(owner)).delete(tokenId);
+        new StorageMap(ctx, createTokensOfPrefix(to)).put(tokenId, 1);
+
+        decrementBalanceByOne(owner);
+        incrementBalanceByOne(to);
+
+        onTransfer.fire(owner, to, 1, tokenId);
+
+        if (ContractManagement.getContract(to) != null) {
+            Contract.call(to, "onNEP11Payment", CallFlags.All,
+                    new Object[] { owner, 1, tokenId, data });
+        }
+        return true;
+    }
+
+    /* UTIL */
+
+    /**
+     * Mints a NFT for owner. When the NFT is from generation 1, then there is a 10%
+     * chance that the owner will be changed to a random villain candy owner. There
+     * is a 10% chance to mint a
+     * NFT of type Villain. 90% to mint a NFT of type Villager.
+     * Villager NFTs receive a random claimBonus. Villain NFTs receive a random
+     * sugar value.
+     * 
+     * @param owner
+     * @param gen
+     */
+    private static void mint(Hash160 owner, String gen) {
+        int totalSupply = totalSupply();
+        // increase totalSupply by 1, so nft names start counting at 1 instead of 0
+        String ts = StdLib.jsonSerialize(++totalSupply);
+        ByteString tokenId = new ByteString(totalSupply);
+        Map<String, String> properties = new Map<>();
+        properties.put(NAME, "CandyClash Candy #" + ts);
+        properties.put(DESC, "CandyClash Candy NFT. Stake to earn $CANDY.");
+        properties.put(IMAGE, getImageBaseURI() + "/" + ts + ".png");
+        properties.put(TOKEN_URI, "");
+        properties.put(GENERATION, gen);
+        // there is a 10% chance that a new gen 1 mint can be stolen
+        if (gen == "1") {
+            boolean steal = Runtime.getRandom() % 10 == 0;
+            if (steal) {
+                Hash160 newOwner = randomVillainCandyOwner();
+                owner = newOwner != null ? newOwner : owner;
+            }
+        }
+        boolean isEvil = Runtime.getRandom() % 10 == 0;
+        if (isEvil) {
+            properties.put(SUGAR, "1"); // RANDOMIZE
+            properties.put(TYPE, TYPE_VILLAIN);
+            villainCandies.put(tokenId, owner);
+        } else {
+            properties.put(SUGAR, "4"); // RANDOMIZE
+            int randBonus = randomBonusClaimAmount();
+            String bonus = StdLib.jsonSerialize(randBonus);
+            properties.put(BONUS, bonus);
+            properties.put(TYPE, TYPE_VILLAGER);
+            villagerCandies.put(tokenId, owner);
+        }
+        incrementTotalSupplyByOne();
+        updateProperties(properties, tokenId);
+        tokens.put(tokenId, tokenId);
+        ownerOfMap.put(tokenId, owner);
+        new StorageMap(ctx, createTokensOfPrefix(owner)).put(tokenId, 1);
+        incrementBalanceByOne(owner);
+        onMint.fire(owner, tokenId);
+    }
+
+    /**
+     * Calculate a random number.
+     * - 50% to get 0
+     * - 20% to get 1
+     * - 14% to get 2
+     * - 10% to get 3
+     * - 5% to get 4
+     * - 1% to get 5
+     * 
+     * @return random claim bonus number between 1 and 5
+     */
+    private static int randomBonusClaimAmount() {
+        int rand = randomNumberUntil(100);
+        int bonus = 0;
+        if (rand == 0) {
+            bonus = 5;
+        } else if (rand < 6) {
+            bonus = 4;
+        } else if (rand < 16) {
+            bonus = 3;
+        } else if (rand < 30) {
+            bonus = 2;
+        } else if (rand < 50) {
+            bonus = 1;
+        }
+        return bonus;
+    }
+
+    /**
+     * Calculate a random number between 0 and max -1
+     * 
+     * @param max upper bound
+     * @return random number
+     */
+    private static int randomNumberUntil(int max) {
+        Helper.assertTrue(max > 1);
+        return (Runtime.getRandom() & 0xFFFFFFFF) % max;
+    }
+
+    /**
+     * Get a random number between 0 and amount of total villain NFTs staked.
+     * Iterate over the staked villain NFTs and return the NFT owner at the index of
+     * the random number. When no villain NFT is staked then return null
+     * 
+     * @return the owner hash of a random villain NFT owner
+     */
+    private static Hash160 randomVillainCandyOwner() {
+        int rand = randomNumberUntil(totalVillainCandiesStaked());
+        Iterator<ByteString> iter = villainCandies.find(FindOptions.ValuesOnly);
+        int count = 0;
+        while (iter.next()) {
+            if (count == rand) {
+                return new Hash160(iter.get());
+            }
+            count++;
+        }
+        return null;
+    }
+
+    private static int totalVillainCandiesStaked() {
+        return (int) Contract.call(stakingContract(), "totalVillainCandiesStaked", CallFlags.All, new Object[0]);
+    }
+
+    private static Hash160 stakingContract() {
+        return new Hash160(Storage.get(ctx, stakingContractKey));
+    }
+
+    private static byte[] createTokensOfPrefix(Hash160 owner) {
+        return Helper.concat(tokensOfKey, owner.toByteArray());
+    }
+
+    private static Hash160 candyContract() {
+        return new Hash160(Storage.get(ctx, candyHashKey));
+    }
+
+    private static void updateProperties(Map<String, String> properties, ByteString tokenId) {
+        assert properties.containsKey(NAME) : "missing name";
+        String tokenName = properties.get(NAME);
+        propertiesNameMap.put(tokenId, tokenName);
+
+        assert properties.containsKey(DESC) : "missing desc";
+        String tokenDesc = properties.get(DESC);
+        propertiesDescriptionMap.put(tokenId, tokenDesc);
+
+        assert properties.containsKey(IMAGE) : "missing img";
+        String tokenImg = properties.get(IMAGE);
+        propertiesImageMap.put(tokenId, tokenImg);
+
+        assert properties.containsKey(TOKEN_URI) : "missing uri";
+        String tokenUri = properties.get(TOKEN_URI);
+        propertiesTokenURIMap.put(tokenId, tokenUri);
+
+        assert properties.containsKey(SUGAR) : "missing sugar";
+        String sugarValue = properties.get(SUGAR);
+        propertiesSugarMap.put(tokenId, sugarValue);
+
+        assert properties.containsKey(TYPE) : "missing type";
+        String tokenType = properties.get(TYPE);
+        propertiesTypeMap.put(tokenId, tokenType);
+
+        if (tokenType == TYPE_VILLAGER) {
+            assert properties.containsKey(BONUS) : "missing claimBonus";
+            String bonus = properties.get(BONUS);
+            propertiesClaimBonusMap.put(tokenId, bonus);
+        }
+
+    }
+
     private static Map<String, String> getAttributeMap(String trait, String value) {
         Map<String, String> m = new Map<>();
         m.put(ATTRIBUTE_TRAIT_TYPE, trait);
         m.put(ATTRIBUTE_VALUE, value);
         m.put(ATTRIBUTE_DISPLAY_TYPE, "");
         return m;
-    }
-
-    // TODO: dont need anymore
-    private static int maxMintAmount() {
-        return Storage.getInt(ctx, maxMintAmountKey);
     }
 
     private static void incrementBalanceByOne(Hash160 owner) {
@@ -546,34 +604,10 @@ public class CandyClashNFT {
         Storage.put(ctx, totalSupplyKey, updatedTotalSupply);
     }
 
+    /* PERMISSION CHECKS */
+
     private static void onlyOwner() {
         assert Runtime.checkWitness(contractOwner()) : "onlyOwner";
-    }
-
-    public static String getVillagerCandies(int from, int size) {
-        Iterator<Struct<ByteString, ByteString>> iterator = villagerCandies.find(FindOptions.RemovePrefix);
-        List<Integer> result = new List<>();
-        int count = 0;
-        while (iterator.next() && result.size() != size) {
-            if (count >= from) {
-                result.add(iterator.get().key.toInt());
-            }
-            count++;
-        }
-        return StdLib.jsonSerialize(result);
-    }
-
-    public static String getVillainCandies(int from, int size) {
-        Iterator<Struct<ByteString, ByteString>> iterator = villainCandies.find(FindOptions.RemovePrefix);
-        List<Integer> result = new List<>();
-        int count = 0;
-        while (iterator.next() && result.size() != size) {
-            if (count >= from) {
-                result.add(iterator.get().key.toInt());
-            }
-            count++;
-        }
-        return StdLib.jsonSerialize(result);
     }
 
     /* OWNER ONLY METHODS */
