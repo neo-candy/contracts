@@ -20,6 +20,7 @@ import io.neow3j.devpack.annotations.OnNEP17Payment;
 import io.neow3j.devpack.annotations.Safe;
 import io.neow3j.devpack.constants.CallFlags;
 import io.neow3j.devpack.constants.FindOptions;
+import io.neow3j.devpack.constants.NativeContract;
 import io.neow3j.devpack.contracts.ContractManagement;
 import io.neow3j.devpack.contracts.GasToken;
 import io.neow3j.devpack.contracts.StdLib;
@@ -35,7 +36,7 @@ import static io.neow3j.devpack.StringLiteralHelper.stringToInt;
 @ManifestExtra(key = "description", value = "CandyClash NFT Collection")
 @ManifestExtra(key = "email", value = "hello@neocandy.io")
 @Permission(contract = "*", methods = { "totalVillainCandiesStaked", "onNEP11Payment", "transfer" })
-@Permission(contract = "0xfffdc93764dbaddd97c48f252a53ea4643faa3fd", methods = "*")
+@Permission(nativeContract = NativeContract.ContractManagement)
 public class CandyClashNFT {
 
     @DisplayName("Debug")
@@ -110,6 +111,7 @@ public class CandyClashNFT {
     private static final StorageMap propertiesSugarMap = new StorageMap(ctx, (byte) 16);
     private static final StorageMap propertiesTypeMap = new StorageMap(ctx, (byte) 17);
     private static final StorageMap propertiesClaimBonusMap = new StorageMap(ctx, (byte) 18);
+    private static final StorageMap propertiesGenerationMap = new StorageMap(ctx, (byte) 21);
     private static final StorageMap villainCandies = new StorageMap(ctx, (byte) 40);
     private static final StorageMap villagerCandies = new StorageMap(ctx, (byte) 19);
 
@@ -286,6 +288,10 @@ public class CandyClashNFT {
         if (claimBonus != null) {
             attributes.add(getAttributeMap(BONUS, claimBonus.toString() + "%"));
         }
+        ByteString generation = propertiesGenerationMap.get(tokenId);
+        if (generation != null) {
+            attributes.add(getAttributeMap(GENERATION, generation.toString()));
+        }
         p.put(ATTRIBUTES, attributes);
 
         return p;
@@ -340,6 +346,10 @@ public class CandyClashNFT {
         ByteString claimBonus = propertiesClaimBonusMap.get(tokenId);
         if (claimBonus != null) {
             attributes.add(getAttributeMap(BONUS, claimBonus.toString() + "%"));
+        }
+        ByteString generation = propertiesGenerationMap.get(tokenId);
+        if (generation != null) {
+            attributes.add(getAttributeMap(GENERATION, generation.toString()));
         }
         p.put(ATTRIBUTES, attributes);
         return StdLib.jsonSerialize(p);
@@ -563,6 +573,10 @@ public class CandyClashNFT {
         assert properties.containsKey(TYPE) : "missing type";
         String tokenType = properties.get(TYPE);
         propertiesTypeMap.put(tokenId, tokenType);
+
+        assert properties.containsKey(GENERATION) : "missing generation";
+        String tokenGeneration = properties.get(GENERATION);
+        propertiesGenerationMap.put(tokenId, tokenGeneration);
 
         if (tokenType == TYPE_VILLAGER) {
             assert properties.containsKey(BONUS) : "missing claimBonus";

@@ -20,6 +20,7 @@ import io.neow3j.devpack.annotations.Permission;
 import io.neow3j.devpack.annotations.Safe;
 import io.neow3j.devpack.constants.CallFlags;
 import io.neow3j.devpack.constants.FindOptions;
+import io.neow3j.devpack.constants.NativeContract;
 import io.neow3j.devpack.contracts.ContractManagement;
 import io.neow3j.devpack.contracts.LedgerContract;
 import io.neow3j.devpack.events.Event1Arg;
@@ -31,7 +32,7 @@ import io.neow3j.devpack.events.Event3Args;
 @ManifestExtra(key = "email", value = "hello@neocandy.io")
 @Permission(contract = "*", methods = { "transfer", "balanceOf", "getTypeOfToken", "getSugarOfToken",
         "propertiesJson" })
-@Permission(contract = "0xfffdc93764dbaddd97c48f252a53ea4643faa3fd", methods = "*")
+@Permission(nativeContract = NativeContract.ContractManagement)
 public class CandyClashStaking {
 
     @DisplayName("debug")
