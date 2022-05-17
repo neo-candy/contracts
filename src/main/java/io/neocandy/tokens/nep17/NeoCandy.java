@@ -15,8 +15,9 @@ import io.neow3j.devpack.annotations.OnDeployment;
 import io.neow3j.devpack.annotations.OnVerification;
 import io.neow3j.devpack.annotations.Permission;
 import io.neow3j.devpack.annotations.Safe;
-import io.neow3j.devpack.annotations.SupportedStandards;
+import io.neow3j.devpack.annotations.SupportedStandard;
 import io.neow3j.devpack.constants.CallFlags;
+import io.neow3j.devpack.constants.NeoStandard;
 import io.neow3j.devpack.contracts.ContractManagement;
 import io.neow3j.devpack.events.Event3Args;
 
@@ -25,7 +26,7 @@ import io.neow3j.devpack.events.Event3Args;
 @ManifestExtra(key = "description", value = "Neo Candy Token Contract")
 @Permission(contract = "*", methods = "onNEP17Payment")
 @Permission(contract = "fffdc93764dbaddd97c48f252a53ea4643faa3fd")
-@SupportedStandards("NEP-17")
+@SupportedStandard(neoStandard = NeoStandard.NEP_17)
 public class NeoCandy {
 
     @DisplayName("Transfer")
