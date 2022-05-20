@@ -22,7 +22,6 @@ import io.neow3j.devpack.constants.CallFlags;
 import io.neow3j.devpack.constants.FindOptions;
 import io.neow3j.devpack.constants.NativeContract;
 import io.neow3j.devpack.contracts.ContractManagement;
-import io.neow3j.devpack.contracts.GasToken;
 import io.neow3j.devpack.contracts.StdLib;
 import io.neow3j.devpack.events.Event1Arg;
 import io.neow3j.devpack.events.Event2Args;
@@ -63,8 +62,17 @@ public class CandyClashNFT {
     private static final String GENERATION = "Generation";
     private static final String BONUS = "Claim Bonus";
     private static final String TYPE = "Type";
+    private static final String ORIGIN = "Origin";
+    private static final String LEVEL = "Level";
+    private static final String AGE = "Age";
+
+    // METADATA VALUES
     private static final String TYPE_VILLAIN = "Villain";
     private static final String TYPE_VILLAGER = "Villager";
+    private static final String ORIGIN_SWEETGLEN = "Sweetglen";
+    private static final String ORIGIN_CANEMOR = "Canemor";
+    private static final String GEN_0 = "0";
+    private static final String GEN_1 = "1";
 
     // GM related properties
     private static final String PROPERTIES = "properties";
@@ -87,7 +95,6 @@ public class CandyClashNFT {
     // STORAGE KEYS
     private static final byte[] ownerkey = Helper.toByteArray((byte) 1);
     private static final byte[] totalSupplyKey = Helper.toByteArray((byte) 2);
-    private static final byte[] gasPriceKey = Helper.toByteArray((byte) 4);
     private static final byte[] candyPriceKey = Helper.toByteArray((byte) 5);
     private static final byte[] candyHashKey = Helper.toByteArray((byte) 6);
     private static final byte[] tokensOfKey = Helper.toByteArray((byte) 24);
@@ -112,35 +119,38 @@ public class CandyClashNFT {
     private static final StorageMap propertiesTypeMap = new StorageMap(ctx, (byte) 17);
     private static final StorageMap propertiesClaimBonusMap = new StorageMap(ctx, (byte) 18);
     private static final StorageMap propertiesGenerationMap = new StorageMap(ctx, (byte) 21);
+    private static final StorageMap propertiesLevelMap = new StorageMap(ctx, (byte) 41);
+    private static final StorageMap propertiesOriginMap = new StorageMap(ctx, (byte) 42);
+    private static final StorageMap propertiesAgeMap = new StorageMap(ctx, (byte) 43);
+
     private static final StorageMap villainCandies = new StorageMap(ctx, (byte) 40);
     private static final StorageMap villagerCandies = new StorageMap(ctx, (byte) 19);
 
-    /**
-     * When the amount of minted tokens is lower than maxGenesisAmount then accept
-     * only GAS else accept CANDY. Call the mint function with sender and generation
-     * parameter. Only when generation 0 nfts are sold out, generation 1 nfts can be
-     * minted.
-     * 
-     * @param from   has to be equal to sender address
-     * @param amount sent
-     * @param data   will be ignored
-     */
     @OnNEP17Payment
-    public static void onPayment(Hash160 from, int amount, Object data) {
-        assert (!isPaused()) : "isPaused";
-        assert (stakingContract() != null) : "missing staking contract";
-        assert (totalSupply() < maxTokensAmount()) : "sold out";
-        Hash160 token = Runtime.getCallingScriptHash();
-        assert (token == GasToken.getHash() || token == candyContract()) : "invalid token";
-        if (token == GasToken.getHash()) {
-            assert (totalSupply() < maxGenesisAmount()) : "not available";
-            assert (amount == gasPrice()) : "invalid amount";
-            mint(from, "0");
-        } else {
-            assert (totalSupply() >= maxGenesisAmount() && totalSupply() < maxTokensAmount()) : "not available";
-            assert (amount == candyPrice()) : "invalid amount";
-            mint(from, "1");
+    public static void onPayment(Hash160 from, int amount, Object data) throws Exception {
+        if (isPaused()) {
+            throw new Exception("isPaused");
         }
+        if (stakingContract() == null) {
+            throw new Exception("missingStakingContract");
+        }
+        if (totalSupply() >= maxTokensAmount()) {
+            throw new Exception("soldOut");
+        }
+        Hash160 token = Runtime.getCallingScriptHash();
+
+        if (token != candyContract()) {
+            throw new Exception("onlyCandy");
+        }
+        if (amount != candyPrice()) {
+            throw new Exception("invalidCandyAmount");
+        }
+
+        String generation = GEN_0;
+        if (totalSupply() >= maxGenesisAmount()) {
+            generation = GEN_1;
+        }
+        mint(from, generation);
         onPayment.fire(from, amount, data);
     }
 
@@ -199,12 +209,7 @@ public class CandyClashNFT {
 
     @Safe
     public static boolean isPaused() {
-        return Storage.getInt(ctx, isPausedKey) == 1 ? true : false;
-    }
-
-    @Safe
-    public static int gasPrice() {
-        return Storage.getInt(ctx, gasPriceKey);
+        return Storage.getInt(ctx, isPausedKey) == 1;
     }
 
     @Safe
@@ -291,6 +296,18 @@ public class CandyClashNFT {
         ByteString generation = propertiesGenerationMap.get(tokenId);
         if (generation != null) {
             attributes.add(getAttributeMap(GENERATION, generation.toString()));
+        }
+        ByteString age = propertiesAgeMap.get(tokenId);
+        if (age != null) {
+            attributes.add(getAttributeMap(AGE, age.toString()));
+        }
+        ByteString origin = propertiesOriginMap.get(tokenId);
+        if (origin != null) {
+            attributes.add(getAttributeMap(ORIGIN, origin.toString()));
+        }
+        ByteString level = propertiesLevelMap.get(tokenId);
+        if (level != null) {
+            attributes.add(getAttributeMap(LEVEL, level.toString()));
         }
         p.put(ATTRIBUTES, attributes);
 
@@ -422,29 +439,23 @@ public class CandyClashNFT {
 
     /* UTIL */
 
-    /**
-     * Mints a NFT for owner. When the NFT is from generation 1, then there is a 10%
-     * chance that the owner will be changed to a random villain candy owner. There
-     * is a 10% chance to mint a
-     * NFT of type Villain. 90% to mint a NFT of type Villager.
-     * Villager NFTs receive a random claimBonus. Villain NFTs receive a random
-     * sugar value.
-     * 
-     * @param owner
-     * @param gen
-     */
+    private static String generateName(boolean villain) {
+        return "foo";
+    }
+
     private static void mint(Hash160 owner, String gen) {
         int totalSupply = totalSupply();
         // increase totalSupply by 1, so nft names start counting at 1 instead of 0
         String ts = StdLib.jsonSerialize(++totalSupply);
         ByteString tokenId = new ByteString(totalSupply);
         Map<String, String> properties = new Map<>();
-        properties.put(NAME, "CandyClash Candy #" + ts);
-        properties.put(DESC, "CandyClash Candy NFT. Stake to earn $CANDY.");
+        properties.put(DESC, "This sweet candy is part of the Candyclash NFT collection.");
         properties.put(IMAGE, getImageBaseURI() + "/" + ts + ".png");
         properties.put(TOKEN_URI, "");
         properties.put(GENERATION, gen);
+
         // there is a 10% chance that a new gen 1 mint can be stolen
+        // APPARENTLY THIS IS NOT 100% SAFE!
         if (gen == "1") {
             boolean steal = Runtime.getRandom() % 10 == 0;
             if (steal) {
@@ -452,16 +463,21 @@ public class CandyClashNFT {
                 owner = newOwner != null ? newOwner : owner;
             }
         }
+        // APPARENTLY THIS IS NOT 100% SAFE!
         boolean isEvil = Runtime.getRandom() % 10 == 0;
+        properties.put(NAME, generateName(isEvil));
+        properties.put(LEVEL, "0"); // RANDOMIZE
+        properties.put(SUGAR, "0"); // RANDOMIZE
+        properties.put(AGE, "1"); // RANDOMIZE
+        int randBonus = randomBonusClaimAmount();
+        String bonus = StdLib.jsonSerialize(randBonus);
+        properties.put(BONUS, bonus);
         if (isEvil) {
-            properties.put(SUGAR, "1"); // RANDOMIZE
+            properties.put(ORIGIN, ORIGIN_CANEMOR);
             properties.put(TYPE, TYPE_VILLAIN);
             villainCandies.put(tokenId, owner);
         } else {
-            properties.put(SUGAR, "4"); // RANDOMIZE
-            int randBonus = randomBonusClaimAmount();
-            String bonus = StdLib.jsonSerialize(randBonus);
-            properties.put(BONUS, bonus);
+            properties.put(ORIGIN, ORIGIN_SWEETGLEN);
             properties.put(TYPE, TYPE_VILLAGER);
             villagerCandies.put(tokenId, owner);
         }
@@ -538,7 +554,8 @@ public class CandyClashNFT {
     }
 
     private static Hash160 stakingContract() {
-        return new Hash160(Storage.get(ctx, stakingContractKey));
+        ByteString result = Storage.get(ctx, stakingContractKey);
+        return result != null ? new Hash160(result) : null;
     }
 
     private static byte[] createTokensOfPrefix(Hash160 owner) {
@@ -546,7 +563,8 @@ public class CandyClashNFT {
     }
 
     private static Hash160 candyContract() {
-        return new Hash160(Storage.get(ctx, candyHashKey));
+        ByteString result = Storage.get(ctx, candyHashKey);
+        return result != null ? new Hash160(result) : null;
     }
 
     private static void updateProperties(Map<String, String> properties, ByteString tokenId) {
@@ -578,12 +596,21 @@ public class CandyClashNFT {
         String tokenGeneration = properties.get(GENERATION);
         propertiesGenerationMap.put(tokenId, tokenGeneration);
 
-        if (tokenType == TYPE_VILLAGER) {
-            assert properties.containsKey(BONUS) : "missing claimBonus";
-            String bonus = properties.get(BONUS);
-            propertiesClaimBonusMap.put(tokenId, bonus);
-        }
+        assert properties.containsKey(LEVEL) : "missing generation";
+        String tokenLevel = properties.get(LEVEL);
+        propertiesLevelMap.put(tokenId, tokenLevel);
 
+        assert properties.containsKey(AGE) : "missing generation";
+        String tokenAge = properties.get(AGE);
+        propertiesAgeMap.put(tokenId, tokenAge);
+
+        assert properties.containsKey(ORIGIN) : "missing generation";
+        String origin = properties.get(ORIGIN);
+        propertiesOriginMap.put(tokenId, origin);
+
+        assert properties.containsKey(BONUS) : "missing claimBonus";
+        String bonus = properties.get(BONUS);
+        propertiesClaimBonusMap.put(tokenId, bonus);
     }
 
     private static Map<String, String> getAttributeMap(String trait, String value) {
@@ -626,11 +653,6 @@ public class CandyClashNFT {
 
     /* OWNER ONLY METHODS */
 
-    public static void getAvailableGas(int amount) {
-        onlyOwner();
-        GasToken.transfer(Runtime.getExecutingScriptHash(), contractOwner(), amount, null);
-    }
-
     public static void getAvailableCandy(int amount) {
         onlyOwner();
         Contract.call(candyContract(), "transfer", CallFlags.All,
@@ -640,11 +662,6 @@ public class CandyClashNFT {
     public static void updateStakingContract(Hash160 contract) {
         onlyOwner();
         Storage.put(ctx, stakingContractKey, contract);
-    }
-
-    public static void updateGasPrice(int amount) {
-        onlyOwner();
-        Storage.put(ctx, gasPriceKey, amount);
     }
 
     public static void updateCandyPrice(int amount) {
@@ -673,10 +690,6 @@ public class CandyClashNFT {
             Hash160 owner = (Hash160) arr[0];
             Helper.assertTrue(Hash160.isValid(owner));
             Storage.put(ctx, ownerkey, owner);
-
-            int gasPrice = (int) arr[1];
-            Helper.assertTrue(gasPrice >= 1_00000000);
-            Storage.put(ctx, gasPriceKey, gasPrice);
 
             int candyPrice = (int) arr[2];
             Helper.assertTrue(candyPrice >= stringToInt("500000000000"));
