@@ -29,6 +29,7 @@ import io.neow3j.devpack.events.Event3Args;
 import io.neow3j.devpack.events.Event4Args;
 
 import static io.neow3j.devpack.StringLiteralHelper.stringToInt;
+import static io.neocandy.games.candyclash.Utils.createStorageMapPrefix;
 
 @ManifestExtra(key = "name", value = "CandyClashNFT Contract")
 @ManifestExtra(key = "author", value = "NeoCandy")
@@ -38,11 +39,13 @@ import static io.neow3j.devpack.StringLiteralHelper.stringToInt;
 @Permission(nativeContract = NativeContract.ContractManagement)
 public class CandyClashNFT {
 
+    // EVENTS
+
     @DisplayName("Debug")
     private static Event1Arg<Object> onDebug;
 
     @DisplayName("Mint")
-    private static Event2Args<Hash160, ByteString> onMint;
+    private static Event2Args<Hash160, String> onMint;
 
     @DisplayName("Transfer")
     static Event4Args<Hash160, Hash160, Integer, ByteString> onTransfer;
@@ -95,61 +98,52 @@ public class CandyClashNFT {
     // STORAGE KEYS
     private static final byte[] ownerkey = Helper.toByteArray((byte) 1);
     private static final byte[] totalSupplyKey = Helper.toByteArray((byte) 2);
-    private static final byte[] candyPriceKey = Helper.toByteArray((byte) 5);
-    private static final byte[] candyHashKey = Helper.toByteArray((byte) 6);
-    private static final byte[] tokensOfKey = Helper.toByteArray((byte) 24);
-    private static final byte[] imageBaseUriKey = Helper.toByteArray((byte) 27);
-    private static final byte[] maxTokensAmountKey = Helper.toByteArray((byte) 28);
-    private static final byte[] maxGenesisAmountKey = Helper.toByteArray((byte) 29);
-    private static final byte[] isPausedKey = Helper.toByteArray((byte) 30);
-    private static final byte[] royaltiesReceiverKey = Helper.toByteArray((byte) 31);
-    private static final byte[] royaltiesAmountKey = Helper.toByteArray((byte) 32);
-    private static final byte[] maxMintAmountKey = Helper.toByteArray((byte) 33);
-    private static final byte[] stakingContractKey = Helper.toByteArray((byte) 34);
-    private static final byte[] xpTableKey = Helper.toByteArray((byte) 44);
-    private static final byte[] increaseXpCostsKey = Helper.toByteArray((byte) 45);
-    private static final byte[] stolenNftsKey = Helper.toByteArray((byte) 48);
-    private static final byte[] lostNftsKey = Helper.toByteArray((byte) 49);
+    private static final byte[] nftPriceKey = Helper.toByteArray((byte) 3);
+    private static final byte[] candyContractHashKey = Helper.toByteArray((byte) 4);
+    private static final byte[] tokensOfKey = Helper.toByteArray((byte) 5);
+    private static final byte[] imageBaseUriKey = Helper.toByteArray((byte) 6);
+    private static final byte[] maxTokensAmountKey = Helper.toByteArray((byte) 7);
+    private static final byte[] maxGenesisAmountKey = Helper.toByteArray((byte) 8);
+    private static final byte[] isPausedKey = Helper.toByteArray((byte) 9);
+    private static final byte[] royaltiesReceiverKey = Helper.toByteArray((byte) 10);
+    private static final byte[] royaltiesAmountKey = Helper.toByteArray((byte) 11);
+    private static final byte[] maxMintAmountKey = Helper.toByteArray((byte) 12);
+    private static final byte[] stakingContractHashKey = Helper.toByteArray((byte) 13);
+    private static final byte[] xpTableKey = Helper.toByteArray((byte) 14);
+    private static final byte[] pricePerXpKey = Helper.toByteArray((byte) 15);
+    private static final byte[] stolenNftsKey = Helper.toByteArray((byte) 16);
+    private static final byte[] lostNftsKey = Helper.toByteArray((byte) 17);
 
     // STORAGE MAPS
-    private static final StorageMap tokens = new StorageMap(ctx, Helper.toByteArray((byte) 3));
-    private static final StorageMap balances = new StorageMap(ctx, Helper.toByteArray((byte) 20));
-    private static final StorageMap ownerOfMap = new StorageMap(ctx, Helper.toByteArray((byte) 4));
-    private static final StorageMap propertiesNameMap = new StorageMap(ctx, (byte) 12);
-    private static final StorageMap propertiesDescriptionMap = new StorageMap(ctx, (byte) 13);
-    private static final StorageMap propertiesImageMap = new StorageMap(ctx, (byte) 14);
-    private static final StorageMap propertiesTokenURIMap = new StorageMap(ctx, (byte) 15);
-    private static final StorageMap propertiesSugarMap = new StorageMap(ctx, (byte) 16);
-    private static final StorageMap propertiesTypeMap = new StorageMap(ctx, (byte) 17);
-    private static final StorageMap propertiesClaimBonusMap = new StorageMap(ctx, (byte) 18);
-    private static final StorageMap propertiesGenerationMap = new StorageMap(ctx, (byte) 21);
-    private static final StorageMap propertiesLevelMap = new StorageMap(ctx, (byte) 41);
-    private static final StorageMap propertiesOriginMap = new StorageMap(ctx, (byte) 42);
-    private static final StorageMap propertiesAgeMap = new StorageMap(ctx, (byte) 43);
-
-    private static final StorageMap villainCandies = new StorageMap(ctx, (byte) 40);
-    private static final StorageMap villagerCandies = new StorageMap(ctx, (byte) 19);
-    private static final StorageMap stolenNFTs = new StorageMap(ctx, (byte) 46);
-    private static final StorageMap lostNFTs = new StorageMap(ctx, (byte) 47);
+    private static final StorageMap tokens = new StorageMap(ctx, Helper.toByteArray((byte) 101));
+    private static final StorageMap balances = new StorageMap(ctx, Helper.toByteArray((byte) 102));
+    private static final StorageMap ownerOfMap = new StorageMap(ctx, Helper.toByteArray((byte) 103));
+    private static final StorageMap sugarValues = new StorageMap(ctx, (byte) 104);
+    private static final StorageMap bonusValues = new StorageMap(ctx, (byte) 105);
+    private static final StorageMap levelValues = new StorageMap(ctx, (byte) 106);
+    private static final StorageMap ageValues = new StorageMap(ctx, (byte) 107);
+    private static final StorageMap villains = new StorageMap(ctx, (byte) 108);
+    private static final StorageMap villagers = new StorageMap(ctx, (byte) 109);
+    private static final StorageMap immutableTokenProperties = new StorageMap(ctx, (byte) 110);
 
     @OnNEP17Payment
     public static void onPayment(Hash160 from, int amount, Object data) throws Exception {
         if (isPaused()) {
-            throw new Exception("isPaused");
+            throw new Exception("onPayment_isPaused");
         }
         if (stakingContract() == null) {
-            throw new Exception("missingStakingContract");
+            throw new Exception("onPayment_missingStakingContract");
         }
         if (totalSupply() >= maxTokensAmount()) {
-            throw new Exception("soldOut");
+            throw new Exception("onPayment_soldOut");
         }
         Hash160 token = Runtime.getCallingScriptHash();
 
         if (token != candyContract()) {
-            throw new Exception("onlyCandy");
+            throw new Exception("onPayment_onlyCandy");
         }
-        if (amount != candyPrice()) {
-            throw new Exception("invalidCandyAmount");
+        if (amount != nftPrice()) {
+            throw new Exception("onPayment_invalidCandyAmount");
         }
 
         String generation = GEN_0;
@@ -219,15 +213,15 @@ public class CandyClashNFT {
     }
 
     @Safe
-    public static int candyPrice() {
-        return Storage.getInt(ctx, candyPriceKey);
+    public static int nftPrice() {
+        return Storage.getInt(ctx, nftPriceKey);
     }
 
     @Safe
     public static Iterator<ByteString> tokensOf(Hash160 owner) {
         return (Iterator<ByteString>) Storage.find(
                 ctx.asReadOnly(),
-                createTokensOfPrefix(owner),
+                createStorageMapPrefix(owner, tokensOfKey),
                 FindOptions.RemovePrefix);
     }
 
@@ -235,7 +229,7 @@ public class CandyClashNFT {
     public static List<String> tokensOfJson(Hash160 owner) throws Exception {
         Iterator<Struct<ByteString, ByteString>> iterator = (Iterator<Struct<ByteString, ByteString>>) Storage.find(
                 ctx.asReadOnly(),
-                createTokensOfPrefix(owner),
+                createStorageMapPrefix(owner, tokensOfKey),
                 FindOptions.RemovePrefix);
         List<String> tokens = new List();
         while (iterator.next()) {
@@ -261,125 +255,45 @@ public class CandyClashNFT {
 
     @Safe
     public static Map<String, Object> properties(ByteString tokenId) throws Exception {
+        ImmutableTokenProperties iTokenProps = (ImmutableTokenProperties) StdLib
+                .deserialize(immutableTokenProperties.get(tokenId));
         Map<String, Object> p = new Map<>();
-        String tokenName = propertiesNameMap.getString(tokenId);
-        if (tokenName == null) {
-            throw new Exception("This token id does not exist.");
+
+        if (iTokenProps == null) {
+            throw new Exception("properties_tokenDoesNotExist");
         }
 
-        p.put(NAME, tokenName);
-        ByteString tokenDescription = propertiesDescriptionMap.get(tokenId);
-        if (tokenDescription != null) {
-            p.put(DESC, tokenDescription.toString());
-        }
-        ByteString tokenImage = propertiesImageMap.get(tokenId);
-        if (tokenImage != null) {
-            p.put(IMAGE, tokenImage.toString());
-        }
-        ByteString tokenURI = propertiesTokenURIMap.get(tokenId);
-        if (tokenURI != null) {
-            p.put(TOKEN_URI, tokenURI.toString());
-        }
-        Map<String, Object> propsMap = new Map<>();
-        propsMap.put(PROPERTY_HAS_LOCKED, false);
-        propsMap.put(PROPERTY_TYPE, PROPERTY_GAME_TYPE);
-        p.put(PROPERTIES, propsMap);
+        p.put(NAME, iTokenProps.getName());
+        p.put(DESC, iTokenProps.getDescription());
+        p.put(IMAGE, iTokenProps.getImage());
+        p.put(TOKEN_URI, iTokenProps.getTokenUri());
+
+        Map<String, Object> properties = new Map<>();
+        properties.put(PROPERTY_HAS_LOCKED, false);
+        properties.put(PROPERTY_TYPE, PROPERTY_GAME_TYPE);
+        p.put(PROPERTIES, properties);
 
         List<Map<String, String>> attributes = new List<>();
+        attributes.add(getAttributeMap(TYPE, iTokenProps.getType()));
+        attributes.add(getAttributeMap(GENERATION, iTokenProps.getGeneration()));
+        attributes.add(getAttributeMap(ORIGIN, iTokenProps.getOrigin()));
 
-        ByteString type = propertiesTypeMap.get(tokenId);
-        if (type != null) {
-            attributes.add(getAttributeMap(TYPE, type.toString()));
-        }
-        ByteString sugar = propertiesSugarMap.get(tokenId);
-        if (sugar != null) {
-            attributes.add(getAttributeMap(SUGAR, sugar.toString()));
-        }
-        ByteString claimBonus = propertiesClaimBonusMap.get(tokenId);
-        if (claimBonus != null) {
-            attributes.add(getAttributeMap(BONUS, claimBonus.toString() + "%"));
-        }
-        ByteString generation = propertiesGenerationMap.get(tokenId);
-        if (generation != null) {
-            attributes.add(getAttributeMap(GENERATION, generation.toString()));
-        }
-        ByteString age = propertiesAgeMap.get(tokenId);
-        if (age != null) {
-            attributes.add(getAttributeMap(AGE, age.toString()));
-        }
-        ByteString origin = propertiesOriginMap.get(tokenId);
-        if (origin != null) {
-            attributes.add(getAttributeMap(ORIGIN, origin.toString()));
-        }
-        ByteString level = propertiesLevelMap.get(tokenId);
-        if (level != null) {
-            attributes.add(getAttributeMap(LEVEL, level.toString()));
-        }
+        attributes.add(getAttributeMap(SUGAR, sugarValues.get(tokenId).toString()));
+        attributes.add(getAttributeMap(BONUS, bonusValues.get(tokenId).toString() + "%"));
+        attributes.add(getAttributeMap(AGE, ageValues.get(tokenId).toString()));
+        attributes.add(getAttributeMap(LEVEL, levelValues.get(tokenId).toString()));
         p.put(ATTRIBUTES, attributes);
 
         return p;
     }
 
     @Safe
-    public static String getTypeOfToken(ByteString tokenId) {
-        return propertiesTypeMap.get(tokenId).toString();
-    }
-
-    @Safe
-    public static String getSugarOfToken(ByteString tokenId) {
-        return propertiesSugarMap.getString(tokenId);
-    }
-
-    @Safe
     public static String propertiesJson(ByteString tokenId) throws Exception {
-        Map<String, Object> p = new Map<>();
-        String tokenName = propertiesNameMap.getString(tokenId);
-        if (tokenName == null) {
-            throw new Exception("This token id does not exist.");
-        }
-        p.put(TOKEN_ID, tokenId.toInt());
-        p.put(NAME, tokenName);
-        ByteString tokenDescription = propertiesDescriptionMap.get(tokenId);
-        if (tokenDescription != null) {
-            p.put(DESC, tokenDescription.toString());
-        }
-        ByteString tokenImage = propertiesImageMap.get(tokenId);
-        if (tokenImage != null) {
-            p.put(IMAGE, tokenImage.toString());
-        }
-        ByteString tokenURI = propertiesTokenURIMap.get(tokenId);
-        if (tokenURI != null) {
-            p.put(TOKEN_URI, tokenURI.toString());
-        }
-        Map<String, Object> propsMap = new Map<>();
-        propsMap.put(PROPERTY_HAS_LOCKED, false);
-        propsMap.put(PROPERTY_TYPE, PROPERTY_GAME_TYPE);
-        p.put(PROPERTIES, propsMap);
-
-        List<Map<String, String>> attributes = new List<>();
-
-        ByteString type = propertiesTypeMap.get(tokenId);
-        if (type != null) {
-            attributes.add(getAttributeMap(TYPE, type.toString()));
-        }
-        ByteString sugar = propertiesSugarMap.get(tokenId);
-        if (sugar != null) {
-            attributes.add(getAttributeMap(SUGAR, sugar.toString()));
-        }
-        ByteString claimBonus = propertiesClaimBonusMap.get(tokenId);
-        if (claimBonus != null) {
-            attributes.add(getAttributeMap(BONUS, claimBonus.toString() + "%"));
-        }
-        ByteString generation = propertiesGenerationMap.get(tokenId);
-        if (generation != null) {
-            attributes.add(getAttributeMap(GENERATION, generation.toString()));
-        }
-        p.put(ATTRIBUTES, attributes);
-        return StdLib.jsonSerialize(p);
+        return StdLib.jsonSerialize(properties(tokenId));
     }
 
     /**
-     * Query all minted villager nfts, supports pagination.
+     * Query minted villager nfts, supports pagination.
      * 
      * @param from start index
      * @param size list size
@@ -387,7 +301,7 @@ public class CandyClashNFT {
      */
     @Safe
     public static String getVillagerCandies(int from, int size) {
-        Iterator<Struct<ByteString, ByteString>> iterator = villagerCandies.find(FindOptions.RemovePrefix);
+        Iterator<Struct<ByteString, ByteString>> iterator = villagers.find(FindOptions.RemovePrefix);
         List<Integer> result = new List<>();
         int count = 0;
         while (iterator.next() && result.size() != size) {
@@ -400,7 +314,7 @@ public class CandyClashNFT {
     }
 
     /**
-     * Query all minted villain nfts, supports pagination.
+     * Query minted villain nfts, supports pagination.
      * 
      * @param from start index
      * @param size list size
@@ -408,7 +322,7 @@ public class CandyClashNFT {
      */
     @Safe
     public static String getVillainCandies(int from, int size) {
-        Iterator<Struct<ByteString, ByteString>> iterator = villainCandies.find(FindOptions.RemovePrefix);
+        Iterator<Struct<ByteString, ByteString>> iterator = villains.find(FindOptions.RemovePrefix);
         List<Integer> result = new List<>();
         int count = 0;
         while (iterator.next() && result.size() != size) {
@@ -421,13 +335,13 @@ public class CandyClashNFT {
     }
 
     @Safe
-    public static int[] getXpTable() {
+    public static int[] experienceTable() {
         return (int[]) StdLib.deserialize(Storage.get(ctx, xpTableKey));
     }
 
     @Safe
-    public static int getXpIncreaseCosts() {
-        return (int) Storage.getInt(ctx, increaseXpCostsKey);
+    public static int pricePerExperiencePoint() {
+        return (int) Storage.getInt(ctx, pricePerXpKey);
     }
 
     /* READ & WRITE */
@@ -435,12 +349,12 @@ public class CandyClashNFT {
     public static boolean transfer(Hash160 to, ByteString tokenId, Object data) throws Exception {
         Hash160 owner = ownerOf(tokenId);
         if (owner == null) {
-            throw new Exception("This token id does not exist");
+            throw new Exception("transfer_tokenDoesNotExist");
         }
         onlyOwner();
         ownerOfMap.put(tokenId, to.toByteArray());
-        new StorageMap(ctx, createTokensOfPrefix(owner)).delete(tokenId);
-        new StorageMap(ctx, createTokensOfPrefix(to)).put(tokenId, 1);
+        new StorageMap(ctx, createStorageMapPrefix(owner, tokensOfKey)).delete(tokenId);
+        new StorageMap(ctx, createStorageMapPrefix(to, tokensOfKey)).put(tokenId, 1);
 
         decrementBalanceByOne(owner);
         incrementBalanceByOne(to);
@@ -454,36 +368,36 @@ public class CandyClashNFT {
         return true;
     }
 
-    public static void addXp(ByteString tokenId, int amount) throws Exception {
+    public static void addExperienceToToken(ByteString tokenId, int amount) throws Exception {
         Hash160 owner = ownerOf(tokenId);
         if (!Runtime.checkWitness(owner)) {
-            throw new Exception("noAuth");
+            throw new Exception("addExperienceToToken_noAuth");
         }
-        int currentXp = propertiesSugarMap.getInt(tokenId);
-        int[] table = getXpTable();
+        int currentXp = sugarValues.getInt(tokenId);
+        int[] table = experienceTable();
         int max = table[table.length - 1];
         if (currentXp + amount > max || amount <= 0) {
-            throw new Exception("invalidAmount");
+            throw new Exception("addExperienceToToken_invalidAmount");
         }
-        int candyCostPerXp = getXpIncreaseCosts();
-        safeTransfer(owner, amount * candyCostPerXp);
+        int price = pricePerExperiencePoint();
+        safeTransfer(owner, amount * price);
         int newExp = currentXp + amount;
-        propertiesSugarMap.put(tokenId, newExp);
-        propertiesLevelMap.put(tokenId, getLevelForXp(newExp));
+        sugarValues.put(tokenId, newExp);
+        levelValues.put(tokenId, getLevelForXp(newExp));
     }
 
     /* UTIL */
 
     private static void safeTransfer(Hash160 from, int amount) throws Exception {
         if (!Runtime.checkWitness(from)) {
-            throw new Exception("noAuth");
+            throw new Exception("safeTransfer_noAuth");
         }
         Contract.call(candyContract(), "transfer", CallFlags.All,
                 new Object[] { from, Runtime.getExecutingScriptHash(), amount, null });
     }
 
     private static int getLevelForXp(int xp) {
-        int[] table = getXpTable();
+        int[] table = experienceTable();
         int level = 1;
         for (int i = 0; i < table.length; i++) {
             if (table[i] >= xp) {
@@ -495,17 +409,16 @@ public class CandyClashNFT {
     }
 
     private static String generateName(boolean villain) {
-        return "foo";
+        return "Sweet Marcid";
     }
 
     private static void mint(Hash160 owner, String gen) throws Exception {
         int totalSupply = totalSupply();
-        // increase totalSupply by 1, so nft names start counting at 1 instead of 0
-        String ts = StdLib.jsonSerialize(++totalSupply);
-        ByteString tokenId = new ByteString(totalSupply);
+        String tokenId = StdLib.jsonSerialize(++totalSupply);
         Map<String, String> properties = new Map<>();
-        properties.put(DESC, "This sweet candy is part of the Candyclash NFT collection.");
-        properties.put(IMAGE, getImageBaseURI() + "/" + ts + ".png");
+        properties.put(TOKEN_ID, tokenId);
+        properties.put(DESC, "This candy is part of the Candyclash NFT collection.");
+        properties.put(IMAGE, getImageBaseURI() + "/" + tokenId + ".png");
         properties.put(TOKEN_URI, "");
         properties.put(GENERATION, gen);
 
@@ -513,10 +426,10 @@ public class CandyClashNFT {
         if (gen == "1") {
             boolean steal = Runtime.getRandom() % 10 == 0;
             if (steal) {
-                lostNFTs.put(createLostNftsPrefix(owner), tokenId);
+                new StorageMap(ctx, createStorageMapPrefix(owner, lostNftsKey)).put(tokenId, 1);
                 Hash160 newOwner = randomVillainCandyOwner();
                 owner = newOwner != null ? newOwner : owner;
-                stolenNFTs.put(createStolenNftsPrefix(owner), tokenId);
+                new StorageMap(ctx, createStorageMapPrefix(owner, stolenNftsKey)).put(tokenId, 1);
             }
         }
         boolean isEvil = Runtime.getRandom() % 10 == 0;
@@ -530,17 +443,17 @@ public class CandyClashNFT {
         if (isEvil) {
             properties.put(ORIGIN, ORIGIN_CANEMOR);
             properties.put(TYPE, TYPE_VILLAIN);
-            villainCandies.put(tokenId, owner);
+            villains.put(tokenId, owner);
         } else {
             properties.put(ORIGIN, ORIGIN_SWEETGLEN);
             properties.put(TYPE, TYPE_VILLAGER);
-            villagerCandies.put(tokenId, owner);
+            villagers.put(tokenId, owner);
         }
         incrementTotalSupplyByOne();
-        updateProperties(properties, tokenId);
+        saveProperties(properties, tokenId);
         tokens.put(tokenId, tokenId);
         ownerOfMap.put(tokenId, owner);
-        new StorageMap(ctx, createTokensOfPrefix(owner)).put(tokenId, 1);
+        new StorageMap(ctx, createStorageMapPrefix(owner, tokensOfKey)).put(tokenId, 1);
         incrementBalanceByOne(owner);
         onMint.fire(owner, tokenId);
     }
@@ -574,7 +487,7 @@ public class CandyClashNFT {
     }
 
     /**
-     * Calculate a random number between 0 and max -1
+     * Calculate a random number between 0 and max-1
      * 
      * @param max upper bound
      * @return random number
@@ -593,7 +506,7 @@ public class CandyClashNFT {
      */
     private static Hash160 randomVillainCandyOwner() {
         int rand = randomNumberUntil(totalVillainCandiesStaked());
-        Iterator<ByteString> iter = villainCandies.find(FindOptions.ValuesOnly);
+        Iterator<ByteString> iter = villains.find(FindOptions.ValuesOnly);
         int count = 0;
         while (iter.next()) {
             if (count == rand) {
@@ -609,93 +522,83 @@ public class CandyClashNFT {
     }
 
     private static Hash160 stakingContract() {
-        ByteString result = Storage.get(ctx, stakingContractKey);
+        ByteString result = Storage.get(ctx, stakingContractHashKey);
         return result != null ? new Hash160(result) : null;
-    }
-
-    private static byte[] createTokensOfPrefix(Hash160 owner) {
-        return Helper.concat(tokensOfKey, owner.toByteArray());
-    }
-
-    private static byte[] createStolenNftsPrefix(Hash160 owner) {
-        return Helper.concat(stolenNftsKey, owner.toByteArray());
-    }
-
-    private static byte[] createLostNftsPrefix(Hash160 owner) {
-        return Helper.concat(stolenNftsKey, owner.toByteArray());
     }
 
     private static Hash160 candyContract() {
-        ByteString result = Storage.get(ctx, candyHashKey);
+        ByteString result = Storage.get(ctx, candyContractHashKey);
         return result != null ? new Hash160(result) : null;
     }
 
-    private static void updateProperties(Map<String, String> properties, ByteString tokenId) throws Exception {
+    private static void saveProperties(Map<String, String> properties, String tokenId) throws Exception {
+
         if (!properties.containsKey(NAME)) {
-            throw new Exception("missing name");
+            throw new Exception("saveProperties_missingName");
         }
-        String tokenName = properties.get(NAME);
-        propertiesNameMap.put(tokenId, tokenName);
 
         if (!properties.containsKey(DESC)) {
-            throw new Exception("missing desc");
+            throw new Exception("saveProperties_missingDescription");
         }
-        String tokenDesc = properties.get(DESC);
-        propertiesDescriptionMap.put(tokenId, tokenDesc);
 
         if (!properties.containsKey(IMAGE)) {
-            throw new Exception("missing img");
+            throw new Exception("saveProperties_missingImage");
         }
-        String tokenImg = properties.get(IMAGE);
-        propertiesImageMap.put(tokenId, tokenImg);
 
         if (!properties.containsKey(TOKEN_URI)) {
-            throw new Exception("missing tokenURI");
+            throw new Exception("saveProperties_missingTokenUri");
         }
-        String tokenUri = properties.get(TOKEN_URI);
-        propertiesTokenURIMap.put(tokenId, tokenUri);
 
         if (!properties.containsKey(SUGAR)) {
-            throw new Exception("missing sugar");
+            throw new Exception("saveProperties_missingSugar");
         }
-        String sugarValue = properties.get(SUGAR);
-        propertiesSugarMap.put(tokenId, sugarValue);
 
         if (!properties.containsKey(TYPE)) {
-            throw new Exception("missing type");
+            throw new Exception("saveProperties_missingType");
         }
-        String tokenType = properties.get(TYPE);
-        propertiesTypeMap.put(tokenId, tokenType);
 
         if (!properties.containsKey(GENERATION)) {
-            throw new Exception("missing gen");
+            throw new Exception("saveProperties_missingGeneration");
         }
-        String tokenGeneration = properties.get(GENERATION);
-        propertiesGenerationMap.put(tokenId, tokenGeneration);
 
         if (!properties.containsKey(LEVEL)) {
-            throw new Exception("missing level");
+            throw new Exception("saveProperties_missingLevel");
         }
-        String tokenLevel = properties.get(LEVEL);
-        propertiesLevelMap.put(tokenId, tokenLevel);
 
         if (!properties.containsKey(AGE)) {
-            throw new Exception("missing age");
+            throw new Exception("saveProperties_missingAge");
         }
-        String tokenAge = properties.get(AGE);
-        propertiesAgeMap.put(tokenId, tokenAge);
 
         if (!properties.containsKey(ORIGIN)) {
-            throw new Exception("missing origin");
+            throw new Exception("saveProperties_missingOrigin");
         }
-        String origin = properties.get(ORIGIN);
-        propertiesOriginMap.put(tokenId, origin);
 
         if (!properties.containsKey(BONUS)) {
-            throw new Exception("missing bonus");
+            throw new Exception("saveProperties_missingBonus");
         }
+
+        String name = properties.get(NAME);
+        String desc = properties.get(DESC);
+        String img = properties.get(IMAGE);
+        String uri = properties.get(TOKEN_URI);
+        String type = properties.get(TYPE);
+        String generation = properties.get(GENERATION);
+        String origin = properties.get(ORIGIN);
+
+        ImmutableTokenProperties iTokenProps = new ImmutableTokenProperties(tokenId, name, img, desc, uri,
+                type, origin,
+                generation);
+        immutableTokenProperties.put(tokenId, StdLib.serialize(iTokenProps));
+
+        String sugar = properties.get(SUGAR);
+        String level = properties.get(LEVEL);
+        String age = properties.get(AGE);
         String bonus = properties.get(BONUS);
-        propertiesClaimBonusMap.put(tokenId, bonus);
+
+        sugarValues.put(tokenId, sugar);
+        levelValues.put(tokenId, level);
+        ageValues.put(tokenId, age);
+        bonusValues.put(tokenId, bonus);
     }
 
     private static Map<String, String> getAttributeMap(String trait, String value) {
@@ -748,12 +651,12 @@ public class CandyClashNFT {
 
     public static void updateStakingContract(Hash160 contract) throws Exception {
         onlyOwner();
-        Storage.put(ctx, stakingContractKey, contract);
+        Storage.put(ctx, stakingContractHashKey, contract);
     }
 
     public static void updateCandyPrice(int amount) throws Exception {
         onlyOwner();
-        Storage.put(ctx, candyPriceKey, amount);
+        Storage.put(ctx, nftPriceKey, amount);
     }
 
     public static void updateImageBaseURI(String uri) throws Exception {
@@ -780,11 +683,11 @@ public class CandyClashNFT {
 
             int candyPrice = (int) arr[2];
             Helper.assertTrue(candyPrice >= stringToInt("500000000000"));
-            Storage.put(ctx, candyPriceKey, candyPrice);
+            Storage.put(ctx, nftPriceKey, candyPrice);
 
             Hash160 candyHash = (Hash160) arr[3];
             Helper.assertTrue(Hash160.isValid(candyHash));
-            Storage.put(ctx, candyHashKey, candyHash);
+            Storage.put(ctx, candyContractHashKey, candyHash);
 
             String imageBaseURI = (String) arr[4];
             Helper.assertTrue(imageBaseURI.length() > 0);
@@ -818,14 +721,14 @@ public class CandyClashNFT {
 
             int upgradeXpCosts = (int) arr[12];
             Helper.assertTrue(upgradeXpCosts > 0);
-            Storage.put(ctx, increaseXpCostsKey, upgradeXpCosts);
+            Storage.put(ctx, pricePerXpKey, upgradeXpCosts);
         }
     }
 
     public static void update(ByteString script, String manifest) throws Exception {
         onlyOwner();
         if (script.length() == 0 && manifest.length() == 0) {
-            throw new Exception("The new contract script and manifest must not be empty.");
+            throw new Exception("update_contractAndManifestEmpty");
         }
         ContractManagement.update(script, manifest);
     }
