@@ -30,6 +30,7 @@ import io.neow3j.devpack.events.Event4Args;
 
 import static io.neow3j.devpack.StringLiteralHelper.stringToInt;
 import static io.neocandy.games.candyclash.Utils.createStorageMapPrefix;
+import static io.neocandy.games.candyclash.Utils.randomNumber;
 
 @ManifestExtra(key = "name", value = "CandyClashNFT Contract")
 @ManifestExtra(key = "author", value = "NeoCandy")
@@ -45,7 +46,7 @@ public class CandyClashNFT {
     private static Event1Arg<Object> onDebug;
 
     @DisplayName("Mint")
-    private static Event2Args<Hash160, String> onMint;
+    private static Event2Args<Hash160, ByteString> onMint;
 
     @DisplayName("Transfer")
     static Event4Args<Hash160, Hash160, Integer, ByteString> onTransfer;
@@ -151,6 +152,7 @@ public class CandyClashNFT {
             generation = GEN_1;
         }
         mint(from, generation);
+        burn(amount);
         onPayment.fire(from, amount, data);
     }
 
@@ -380,7 +382,7 @@ public class CandyClashNFT {
             throw new Exception("addExperienceToToken_invalidAmount");
         }
         int price = pricePerExperiencePoint();
-        safeTransfer(owner, amount * price);
+        safeTransfer(owner, Runtime.getExecutingScriptHash(), amount * price);
         int newExp = currentXp + amount;
         sugarValues.put(tokenId, newExp);
         levelValues.put(tokenId, getLevelForXp(newExp));
@@ -388,7 +390,11 @@ public class CandyClashNFT {
 
     /* UTIL */
 
-    private static void safeTransfer(Hash160 from, int amount) throws Exception {
+    private static void burn(int amount) throws Exception {
+        safeTransfer(Runtime.getExecutingScriptHash(), Hash160.zero(), amount);
+    }
+
+    private static void safeTransfer(Hash160 from, Hash160 to, int amount) throws Exception {
         if (!Runtime.checkWitness(from)) {
             throw new Exception("safeTransfer_noAuth");
         }
@@ -414,9 +420,10 @@ public class CandyClashNFT {
 
     private static void mint(Hash160 owner, String gen) throws Exception {
         int totalSupply = totalSupply();
-        String tokenId = StdLib.jsonSerialize(++totalSupply);
+        String ts = StdLib.jsonSerialize(++totalSupply);
+        ByteString tokenId = new ByteString(ts);
         Map<String, String> properties = new Map<>();
-        properties.put(TOKEN_ID, tokenId);
+        properties.put(TOKEN_ID, ts);
         properties.put(DESC, "This candy is part of the Candyclash NFT collection.");
         properties.put(IMAGE, getImageBaseURI() + "/" + tokenId + ".png");
         properties.put(TOKEN_URI, "");
@@ -470,7 +477,7 @@ public class CandyClashNFT {
      * @return random claim bonus number between 1 and 5
      */
     private static int randomBonusClaimAmount() {
-        int rand = randomNumberUntil(100);
+        int rand = randomNumber(100);
         int bonus = 0;
         if (rand == 0) {
             bonus = 5;
@@ -487,17 +494,6 @@ public class CandyClashNFT {
     }
 
     /**
-     * Calculate a random number between 0 and max-1
-     * 
-     * @param max upper bound
-     * @return random number
-     */
-    private static int randomNumberUntil(int max) {
-        Helper.assertTrue(max > 1);
-        return (Runtime.getRandom() & 0xFFFFFFFF) % max;
-    }
-
-    /**
      * Get a random number between 0 and amount of total villain NFTs staked.
      * Iterate over the staked villain NFTs and return the NFT owner at the index of
      * the random number. When no villain NFT is staked then return null
@@ -505,7 +501,7 @@ public class CandyClashNFT {
      * @return the owner hash of a random villain NFT owner
      */
     private static Hash160 randomVillainCandyOwner() {
-        int rand = randomNumberUntil(totalVillainCandiesStaked());
+        int rand = randomNumber(totalVillainCandiesStaked());
         Iterator<ByteString> iter = villains.find(FindOptions.ValuesOnly);
         int count = 0;
         while (iter.next()) {
@@ -531,7 +527,7 @@ public class CandyClashNFT {
         return result != null ? new Hash160(result) : null;
     }
 
-    private static void saveProperties(Map<String, String> properties, String tokenId) throws Exception {
+    private static void saveProperties(Map<String, String> properties, ByteString tokenId) throws Exception {
 
         if (!properties.containsKey(NAME)) {
             throw new Exception("saveProperties_missingName");
@@ -585,7 +581,7 @@ public class CandyClashNFT {
         String generation = properties.get(GENERATION);
         String origin = properties.get(ORIGIN);
 
-        ImmutableTokenProperties iTokenProps = new ImmutableTokenProperties(tokenId, name, img, desc, uri,
+        ImmutableTokenProperties iTokenProps = new ImmutableTokenProperties(tokenId.toString(), name, img, desc, uri,
                 type, origin,
                 generation);
         immutableTokenProperties.put(tokenId, StdLib.serialize(iTokenProps));
@@ -642,12 +638,6 @@ public class CandyClashNFT {
     }
 
     /* OWNER ONLY METHODS */
-
-    public static void getAvailableCandy(int amount) throws Exception {
-        onlyOwner();
-        Contract.call(candyContract(), "transfer", CallFlags.All,
-                new Object[] { Runtime.getExecutingScriptHash(), contractOwner(), amount, null });
-    }
 
     public static void updateStakingContract(Hash160 contract) throws Exception {
         onlyOwner();
@@ -719,9 +709,9 @@ public class CandyClashNFT {
             Helper.assertTrue(xpTable.length > 1);
             Storage.put(ctx, xpTableKey, StdLib.serialize(xpTable));
 
-            int upgradeXpCosts = (int) arr[12];
-            Helper.assertTrue(upgradeXpCosts > 0);
-            Storage.put(ctx, pricePerXpKey, upgradeXpCosts);
+            int pricePerXp = (int) arr[12];
+            Helper.assertTrue(pricePerXp > 0);
+            Storage.put(ctx, pricePerXpKey, pricePerXp);
         }
     }
 
