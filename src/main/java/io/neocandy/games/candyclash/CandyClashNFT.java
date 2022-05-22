@@ -279,7 +279,6 @@ public class CandyClashNFT {
         attributes.add(getAttributeMap(TYPE, iTokenProps.getType()));
         attributes.add(getAttributeMap(GENERATION, iTokenProps.getGeneration()));
         attributes.add(getAttributeMap(ORIGIN, iTokenProps.getOrigin()));
-
         attributes.add(getAttributeMap(SUGAR, sugarValues.get(tokenId).toString()));
         attributes.add(getAttributeMap(BONUS, bonusValues.get(tokenId).toString() + "%"));
         attributes.add(getAttributeMap(AGE, ageValues.get(tokenId).toString()));
@@ -425,7 +424,7 @@ public class CandyClashNFT {
         Map<String, String> properties = new Map<>();
         properties.put(TOKEN_ID, ts);
         properties.put(DESC, "This candy is part of the Candyclash NFT collection.");
-        properties.put(IMAGE, getImageBaseURI() + "/" + tokenId + ".png");
+        // properties.put(IMAGE, getImageBaseURI() + "/" + tokenId + ".png");
         properties.put(TOKEN_URI, "");
         properties.put(GENERATION, gen);
 
