@@ -78,9 +78,9 @@ public class CandyClashNFT {
     private static final String TYPE = "Type";
     private static final String ORIGIN = "Origin";
     private static final String LEVEL = "Level";
-    private static final String AGE = "Age";
+    private static final String HEALTH = "Health";
     private static final String ACTIONS = "Action Points";
-    private static final String AGING_SPEED = "Aging Speed";
+    private static final String HEALTH_STATUS = "Health Status";
 
     // METADATA VALUES
     private static final String TYPE_VILLAIN = "Villain";
@@ -136,7 +136,7 @@ public class CandyClashNFT {
     private static final StorageMap sugarValues = new StorageMap(ctx, (byte) 104);
     private static final StorageMap bonusValues = new StorageMap(ctx, (byte) 105);
     private static final StorageMap levelValues = new StorageMap(ctx, (byte) 106);
-    private static final StorageMap ageValues = new StorageMap(ctx, (byte) 107);
+    private static final StorageMap healthValues = new StorageMap(ctx, (byte) 107);
     private static final StorageMap actionPointValues = new StorageMap(ctx, (byte) 108);
     private static final StorageMap villains = new StorageMap(ctx, (byte) 109);
     private static final StorageMap villagers = new StorageMap(ctx, (byte) 110);
@@ -296,7 +296,7 @@ public class CandyClashNFT {
         attributes.add(getAttributeMap(ORIGIN, iTokenProps.getOrigin()));
         attributes.add(getAttributeMap(SUGAR, sugarValues.get(tokenId).toString()));
         attributes.add(getAttributeMap(BONUS, bonusValues.get(tokenId).toString() + "%"));
-        attributes.add(getAttributeMap(AGE, ageValues.get(tokenId).toString()));
+        attributes.add(getAttributeMap(HEALTH, healthValues.get(tokenId).toString()));
         attributes.add(getAttributeMap(LEVEL, levelValues.get(tokenId).toString()));
         attributes.add(getAttributeMap(ACTIONS, actionPointValues.get(tokenId).toString()));
         p.put(ATTRIBUTES, attributes);
@@ -497,7 +497,7 @@ public class CandyClashNFT {
         properties.put(NAME, generateName(isEvil));
         properties.put(LEVEL, "1");
         properties.put(SUGAR, "0");
-        properties.put(AGE, "1"); // RANDOMIZE
+        properties.put(HEALTH, "100"); // RANDOMIZE
         properties.put(ACTIONS, "1");
         int randBonus = randomBonusClaimAmount();
         String bonus = StdLib.jsonSerialize(randBonus);
@@ -616,8 +616,8 @@ public class CandyClashNFT {
             throw new Exception("saveProperties_missingLevel");
         }
 
-        if (!properties.containsKey(AGE)) {
-            throw new Exception("saveProperties_missingAge");
+        if (!properties.containsKey(HEALTH)) {
+            throw new Exception("saveProperties_missingHealth");
         }
 
         if (!properties.containsKey(ORIGIN)) {
@@ -643,12 +643,12 @@ public class CandyClashNFT {
 
         String sugar = properties.get(SUGAR);
         String level = properties.get(LEVEL);
-        String age = properties.get(AGE);
+        String health = properties.get(HEALTH);
         String bonus = properties.get(BONUS);
 
         sugarValues.put(tokenId, sugar);
         levelValues.put(tokenId, level);
-        ageValues.put(tokenId, age);
+        healthValues.put(tokenId, health);
         bonusValues.put(tokenId, bonus);
     }
 
