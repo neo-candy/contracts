@@ -6,7 +6,7 @@ import io.neow3j.devpack.Runtime;
 
 public class Utils {
 
-    private static String[] NAMES = new String[] { "Cheddies", "Boogers", "Goofies" };
+    private static final String[] NAMES = new String[] { "Cheddies", "Boogers", "Goofies" };
 
     public static byte[] createStorageMapPrefix(Hash160 owner, byte[] prefix) {
         return Helper.concat(prefix, owner.toByteArray());

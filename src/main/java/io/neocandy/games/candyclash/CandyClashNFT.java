@@ -31,6 +31,7 @@ import io.neow3j.devpack.events.Event4Args;
 import static io.neow3j.devpack.StringLiteralHelper.stringToInt;
 import static io.neocandy.games.candyclash.Utils.createStorageMapPrefix;
 import static io.neocandy.games.candyclash.Utils.randomNumber;
+import static io.neocandy.games.candyclash.Utils.generateName;
 
 @ManifestExtra(key = "name", value = "CandyClashNFT Contract")
 @ManifestExtra(key = "author", value = "NeoCandy")
@@ -54,6 +55,15 @@ public class CandyClashNFT {
     @DisplayName("onPayment")
     static Event3Args<Hash160, Integer, Object> onPayment;
 
+    @DisplayName("LevelUp")
+    static Event2Args<ByteString, Integer> onLevelUp;
+
+    @DisplayName("ActionPointAdded")
+    static Event2Args<ByteString, Integer> onActionPointAdded;
+
+    @DisplayName("ExperienceIncreased")
+    static Event2Args<ByteString, Integer> onExperienceIncreased;
+
     // DEFAULT METADATA
     private static final String NAME = "name";
     private static final String DESC = "description";
@@ -69,6 +79,8 @@ public class CandyClashNFT {
     private static final String ORIGIN = "Origin";
     private static final String LEVEL = "Level";
     private static final String AGE = "Age";
+    private static final String ACTIONS = "Action Points";
+    private static final String AGING_SPEED = "Aging Speed";
 
     // METADATA VALUES
     private static final String TYPE_VILLAIN = "Villain";
@@ -114,6 +126,8 @@ public class CandyClashNFT {
     private static final byte[] pricePerXpKey = Helper.toByteArray((byte) 15);
     private static final byte[] stolenNftsKey = Helper.toByteArray((byte) 16);
     private static final byte[] lostNftsKey = Helper.toByteArray((byte) 17);
+    private static final byte[] actionPointPriceKey = Helper.toByteArray((byte) 18);
+    private static final byte[] actionPointsPerLevelTableKey = Helper.toByteArray((byte) 19);
 
     // STORAGE MAPS
     private static final StorageMap tokens = new StorageMap(ctx, Helper.toByteArray((byte) 101));
@@ -123,9 +137,10 @@ public class CandyClashNFT {
     private static final StorageMap bonusValues = new StorageMap(ctx, (byte) 105);
     private static final StorageMap levelValues = new StorageMap(ctx, (byte) 106);
     private static final StorageMap ageValues = new StorageMap(ctx, (byte) 107);
-    private static final StorageMap villains = new StorageMap(ctx, (byte) 108);
-    private static final StorageMap villagers = new StorageMap(ctx, (byte) 109);
-    private static final StorageMap immutableTokenProperties = new StorageMap(ctx, (byte) 110);
+    private static final StorageMap actionPointValues = new StorageMap(ctx, (byte) 108);
+    private static final StorageMap villains = new StorageMap(ctx, (byte) 109);
+    private static final StorageMap villagers = new StorageMap(ctx, (byte) 110);
+    private static final StorageMap immutableTokenProperties = new StorageMap(ctx, (byte) 111);
 
     @OnNEP17Payment
     public static void onPayment(Hash160 from, int amount, Object data) throws Exception {
@@ -143,7 +158,7 @@ public class CandyClashNFT {
         if (token != candyContract()) {
             throw new Exception("onPayment_onlyCandy");
         }
-        if (amount != nftPrice()) {
+        if (amount != nftPriceCandy()) {
             throw new Exception("onPayment_invalidCandyAmount");
         }
 
@@ -215,7 +230,7 @@ public class CandyClashNFT {
     }
 
     @Safe
-    public static int nftPrice() {
+    public static int nftPriceCandy() {
         return Storage.getInt(ctx, nftPriceKey);
     }
 
@@ -283,6 +298,7 @@ public class CandyClashNFT {
         attributes.add(getAttributeMap(BONUS, bonusValues.get(tokenId).toString() + "%"));
         attributes.add(getAttributeMap(AGE, ageValues.get(tokenId).toString()));
         attributes.add(getAttributeMap(LEVEL, levelValues.get(tokenId).toString()));
+        attributes.add(getAttributeMap(ACTIONS, actionPointValues.get(tokenId).toString()));
         p.put(ATTRIBUTES, attributes);
 
         return p;
@@ -345,6 +361,16 @@ public class CandyClashNFT {
         return (int) Storage.getInt(ctx, pricePerXpKey);
     }
 
+    @Safe
+    public static int pricePerActionPoint() {
+        return (int) Storage.getInt(ctx, actionPointPriceKey);
+    }
+
+    @Safe
+    public static int[] actionPointsLevelTable() {
+        return (int[]) StdLib.deserialize(Storage.get(ctx, actionPointsPerLevelTableKey));
+    }
+
     /* READ & WRITE */
 
     public static boolean transfer(Hash160 to, ByteString tokenId, Object data) throws Exception {
@@ -375,25 +401,58 @@ public class CandyClashNFT {
             throw new Exception("addExperienceToToken_noAuth");
         }
         int currentXp = sugarValues.getInt(tokenId);
+        int currentLevel = levelValues.getInt(tokenId);
         int[] table = experienceTable();
         int max = table[table.length - 1];
-        if (currentXp + amount > max || amount <= 0) {
+        if (currentXp + amount > max || amount < 1) {
             throw new Exception("addExperienceToToken_invalidAmount");
         }
         int price = pricePerExperiencePoint();
-        safeTransfer(owner, Runtime.getExecutingScriptHash(), amount * price);
+        safeTransferCandy(owner, Runtime.getExecutingScriptHash(), amount * price);
         int newExp = currentXp + amount;
         sugarValues.put(tokenId, newExp);
+        int newLevel = getLevelForXp(newExp);
         levelValues.put(tokenId, getLevelForXp(newExp));
+        int levelDelta = newLevel - currentLevel;
+        if (levelDelta > 0) {
+            int currentActionPoints = actionPointValues.getInt(tokenId);
+            int maxActionPoints = actionPointsLevelTable()[newLevel];
+            if (maxActionPoints >= currentActionPoints + levelDelta) {
+                actionPointValues.put(tokenId, currentActionPoints + levelDelta);
+                onActionPointAdded.fire(tokenId, levelDelta);
+            }
+            onLevelUp.fire(tokenId, newLevel);
+        }
+        onExperienceIncreased.fire(tokenId, amount);
+    }
+
+    public static void addActionPoint(ByteString tokenId, int amount) throws Exception {
+        // TODO: right now anyone can gift action points, should be okay
+        int currentActionPoints = actionPointValues.getInt(tokenId);
+        int maxActionPoints = actionPointsLevelTable()[levelValues.getInt(tokenId)];
+        if (maxActionPoints == currentActionPoints) {
+            throw new Exception("addActionPoint_alreadyMaxActionPoints");
+        }
+        if (maxActionPoints < currentActionPoints + amount) {
+            if (maxActionPoints == currentActionPoints || amount < 1) {
+                throw new Exception("addActionPoint_invalidAmount");
+            }
+        }
+
+        safeTransferCandy(Runtime.getCallingScriptHash(), Runtime.getExecutingScriptHash(),
+                amount * pricePerActionPoint());
+        int newActionPoints = currentActionPoints + amount;
+        actionPointValues.put(tokenId, newActionPoints);
+        onActionPointAdded.fire(tokenId, amount);
     }
 
     /* UTIL */
 
     private static void burn(int amount) throws Exception {
-        safeTransfer(Runtime.getExecutingScriptHash(), Hash160.zero(), amount);
+        safeTransferCandy(Runtime.getExecutingScriptHash(), Hash160.zero(), amount);
     }
 
-    private static void safeTransfer(Hash160 from, Hash160 to, int amount) throws Exception {
+    private static void safeTransferCandy(Hash160 from, Hash160 to, int amount) throws Exception {
         if (!Runtime.checkWitness(from)) {
             throw new Exception("safeTransfer_noAuth");
         }
@@ -413,10 +472,6 @@ public class CandyClashNFT {
         return level;
     }
 
-    private static String generateName(boolean villain) {
-        return "Sweet Marcid";
-    }
-
     private static void mint(Hash160 owner, String gen) throws Exception {
         int totalSupply = totalSupply();
         String ts = StdLib.jsonSerialize(++totalSupply);
@@ -424,7 +479,7 @@ public class CandyClashNFT {
         Map<String, String> properties = new Map<>();
         properties.put(TOKEN_ID, ts);
         properties.put(DESC, "This candy is part of the Candyclash NFT collection.");
-        // properties.put(IMAGE, getImageBaseURI() + "/" + tokenId + ".png");
+        properties.put(IMAGE, getImageBaseURI() + "/" + tokenId + ".png");
         properties.put(TOKEN_URI, "");
         properties.put(GENERATION, gen);
 
@@ -443,6 +498,7 @@ public class CandyClashNFT {
         properties.put(LEVEL, "1");
         properties.put(SUGAR, "0");
         properties.put(AGE, "1"); // RANDOMIZE
+        properties.put(ACTIONS, "1");
         int randBonus = randomBonusClaimAmount();
         String bonus = StdLib.jsonSerialize(randBonus);
         properties.put(BONUS, bonus);
@@ -655,6 +711,9 @@ public class CandyClashNFT {
 
     public static void updatePause(boolean paused) throws Exception {
         onlyOwner();
+        if (!paused && stakingContract() == null) {
+            throw new Exception("updatePause_misingStakingContract");
+        }
         Storage.put(ctx, isPausedKey, paused ? 1 : 0);
     }
 
@@ -711,6 +770,17 @@ public class CandyClashNFT {
             int pricePerXp = (int) arr[12];
             Helper.assertTrue(pricePerXp > 0);
             Storage.put(ctx, pricePerXpKey, pricePerXp);
+
+            int pricePerActionPoint = (int) arr[13];
+            Helper.assertTrue(pricePerActionPoint > 0);
+            Storage.put(ctx, actionPointPriceKey, pricePerActionPoint);
+
+            int[] actionPointsLevelTable = (int[]) arr[14];
+            Helper.assertTrue(actionPointsLevelTable.length > 1);
+            // for each level there should be an action point entry in the table and the xp
+            // table contains the xp values starting from level 2
+            Helper.assertTrue(actionPointsLevelTable.length == xpTable.length + 1);
+            Storage.put(ctx, actionPointsPerLevelTableKey, StdLib.serialize(xpTable));
         }
     }
 
