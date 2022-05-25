@@ -709,6 +709,14 @@ public class CandyClashNFT {
         Storage.put(ctx, imageBaseUriKey, uri);
     }
 
+    public static void updateMaxGenesisAmount(int amount) throws Exception {
+        onlyOwner();
+        if (amount >= maxTokensAmount()) {
+            throw new Exception("updateMaxGenesisAmount_invalidAmount");
+        }
+        Storage.put(ctx, maxGenesisAmountKey, amount);
+    }
+
     public static void updatePause(boolean paused) throws Exception {
         onlyOwner();
         if (!paused && stakingContract() == null) {
@@ -717,70 +725,108 @@ public class CandyClashNFT {
         Storage.put(ctx, isPausedKey, paused ? 1 : 0);
     }
 
+    public static void updateXpTable(int[] xpTable) throws Exception {
+        onlyOwner();
+        Storage.put(ctx, xpTableKey, StdLib.serialize(xpTable));
+    }
+
+    public static void updateActionPointsTable(int[] actionPointsTable) throws Exception {
+        onlyOwner();
+        Storage.put(ctx, actionPointsPerLevelTableKey, StdLib.serialize(actionPointsTable));
+    }
+
     /* CONTRACT MANAGEMENT */
 
     @OnDeployment
-    public static void deploy(Object data, boolean update) {
+    public static void deploy(Object data, boolean update) throws Exception {
         if (!update) {
             Storage.put(ctx, totalSupplyKey, 0);
             Object[] arr = (Object[]) data;
 
             Hash160 owner = (Hash160) arr[0];
-            Helper.assertTrue(Hash160.isValid(owner));
+            if (!Hash160.isValid(owner)) {
+                throw new Exception("deploy_invalidOwner");
+            }
             Storage.put(ctx, ownerkey, owner);
 
-            int candyPrice = (int) arr[2];
-            Helper.assertTrue(candyPrice >= stringToInt("500000000000"));
+            int candyPrice = (int) arr[1];
+            if (candyPrice < stringToInt("5000000000000")) {
+                throw new Exception("deploy_invalidCandyPriceAmount");
+            }
             Storage.put(ctx, nftPriceKey, candyPrice);
 
-            Hash160 candyHash = (Hash160) arr[3];
-            Helper.assertTrue(Hash160.isValid(candyHash));
+            Hash160 candyHash = (Hash160) arr[2];
+            if (!Hash160.isValid(candyHash)) {
+                throw new Exception("deploy_invalidCandyHash");
+            }
             Storage.put(ctx, candyContractHashKey, candyHash);
 
-            String imageBaseURI = (String) arr[4];
-            Helper.assertTrue(imageBaseURI.length() > 0);
+            String imageBaseURI = (String) arr[3];
+            if (imageBaseURI.length() == 0) {
+                throw new Exception("deploy_invalidImageBaseURI");
+            }
             Storage.put(ctx, imageBaseUriKey, imageBaseURI);
 
-            int maxTokensAmount = (int) arr[5];
-            Helper.assertTrue(maxTokensAmount > 0);
+            int maxTokensAmount = (int) arr[4];
+            if (maxTokensAmount < 1) {
+                throw new Exception("deploy_maxTokensAmount");
+            }
             Storage.put(ctx, maxTokensAmountKey, maxTokensAmount);
 
-            int maxGenesisAmount = (int) arr[6];
-            Helper.assertTrue(maxTokensAmount > 0 && maxGenesisAmount < maxTokensAmount);
+            int maxGenesisAmount = (int) arr[5];
+            if (maxGenesisAmount >= maxTokensAmount) {
+                throw new Exception("deploy_maxGenesisAmount");
+            }
             Storage.put(ctx, maxGenesisAmountKey, maxGenesisAmount);
 
-            Storage.put(ctx, isPausedKey, (int) arr[7]);
+            Storage.put(ctx, isPausedKey, (int) arr[6]);
 
-            String royaltiesReceiverAddress = (String) arr[8];
-            Helper.assertTrue(royaltiesReceiverAddress.length() > 0);
+            String royaltiesReceiverAddress = (String) arr[7];
+            if (royaltiesReceiverAddress.length() == 0) {
+                throw new Exception("deploy_royaltiesReceiverAddress ");
+            }
             Storage.put(ctx, royaltiesReceiverKey, royaltiesReceiverAddress);
 
-            int royaltiesAmount = (int) arr[9];
-            Helper.assertTrue(royaltiesAmount > 0);
+            int royaltiesAmount = (int) arr[8];
+            if (royaltiesAmount <= 0) {
+                throw new Exception("deploy_royaltiesAmount");
+            }
             Storage.put(ctx, royaltiesAmountKey, royaltiesAmount);
 
-            int maxMintAmount = (int) arr[10];
-            Helper.assertTrue(maxMintAmount > 0 && maxMintAmount < 100);
+            int maxMintAmount = (int) arr[9];
+            if (maxMintAmount <= 0 || maxMintAmount > 20) {
+                throw new Exception("deploy_maxMintAmount");
+            }
             Storage.put(ctx, maxMintAmountKey, maxMintAmount);
 
-            int[] xpTable = (int[]) arr[11];
-            Helper.assertTrue(xpTable.length > 1);
+            int[] xpTable = (int[]) arr[10];
+            if (xpTable.length == 0) {
+                throw new Exception("deploy_xpTableLength");
+            }
             Storage.put(ctx, xpTableKey, StdLib.serialize(xpTable));
 
-            int pricePerXp = (int) arr[12];
-            Helper.assertTrue(pricePerXp > 0);
+            int pricePerXp = (int) arr[11];
+            if (pricePerXp <= 0) {
+                throw new Exception("deploy_pricePerXp");
+            }
             Storage.put(ctx, pricePerXpKey, pricePerXp);
 
-            int pricePerActionPoint = (int) arr[13];
-            Helper.assertTrue(pricePerActionPoint > 0);
+            int pricePerActionPoint = (int) arr[12];
+            if (pricePerActionPoint <= 0) {
+                throw new Exception("deploy_pricePerActionPoint");
+            }
             Storage.put(ctx, actionPointPriceKey, pricePerActionPoint);
 
-            int[] actionPointsLevelTable = (int[]) arr[14];
-            Helper.assertTrue(actionPointsLevelTable.length > 1);
+            int[] actionPointsLevelTable = (int[]) arr[13];
+            if (actionPointsLevelTable.length == 0) {
+                throw new Exception("deploy_actionPointsLevelTable");
+            }
             // for each level there should be an action point entry in the table and the xp
             // table contains the xp values starting from level 2
-            Helper.assertTrue(actionPointsLevelTable.length == xpTable.length + 1);
-            Storage.put(ctx, actionPointsPerLevelTableKey, StdLib.serialize(xpTable));
+            if (actionPointsLevelTable.length != xpTable.length + 1) {
+                throw new Exception("deploy_actionPointsLevelTableLength");
+            }
+            Storage.put(ctx, actionPointsPerLevelTableKey, StdLib.serialize(actionPointsLevelTable));
         }
     }
 
