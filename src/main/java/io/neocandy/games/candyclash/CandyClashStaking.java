@@ -30,25 +30,25 @@ import io.neow3j.devpack.events.Event3Args;
 @ManifestExtra(key = "author", value = "NeoCandy")
 @ManifestExtra(key = "description", value = "CandyClash Staking Contract")
 @ManifestExtra(key = "email", value = "hello@neocandy.io")
-@Permission(contract = "*", methods = { "transfer", "balanceOf", "getTypeOfToken", "getSugarOfToken",
-        "propertiesJson" })
+@Permission(contract = "*", methods = { "transfer", "balanceOf", "tokenType", "tokenLevel", "tokenActions",
+        "propertiesJson", "removeActionPoint" })
 @Permission(nativeContract = NativeContract.ContractManagement)
 public class CandyClashStaking {
 
-    @DisplayName("debug")
+    @DisplayName("Debug")
     private static Event1Arg<Object> onDebug;
 
-    @DisplayName("tokenStaked")
+    @DisplayName("TokenStaked")
     private static Event3Args<Hash160, ByteString, Integer> onTokenStaked;
 
-    @DisplayName("onPayment")
+    @DisplayName("OnPayment")
     static Event3Args<Hash160, Integer, Object> onPayment;
 
-    @DisplayName("villagerCandyClaim")
-    static Event3Args<ByteString, Integer, Boolean> onVillagerCandyClaim;
+    @DisplayName("VillagerClaimed")
+    static Event3Args<ByteString, Integer, Boolean> onVillagerClaim;
 
-    @DisplayName("villainCandyClaim")
-    static Event3Args<ByteString, Integer, Boolean> onVillainCandyClaim;
+    @DisplayName("VillainClaimed")
+    static Event3Args<ByteString, Integer, Boolean> onVillainClaim;
 
     private static final int BLOCKS_PER_DAY = 4 * 60 * 24;
 
@@ -56,164 +56,190 @@ public class CandyClashStaking {
     private static final byte[] nftContractkey = Helper.toByteArray((byte) 2);
     private static final byte[] totalSugarStakedKey = Helper.toByteArray((byte) 3);
     private static final byte[] candyPerSugarKey = Helper.toByteArray((byte) 4);
-    private static final byte[] totalVillagerCandiesStakedKey = Helper.toByteArray((byte) 5);
+    private static final byte[] totalVillagersStakedKey = Helper.toByteArray((byte) 5);
     private static final byte[] candiesContractKey = Helper.toByteArray((byte) 6);
-    private static final byte[] pausedKey = Helper.toByteArray((byte) 7);
+    private static final byte[] isPausedKey = Helper.toByteArray((byte) 7);
     private static final byte[] minStakeBlockCountKey = Helper.toByteArray((byte) 8);
     private static final byte[] totalCandiesEarnedKey = Helper.toByteArray((byte) 9);
     private static final byte[] dailyCandyRateKey = Helper.toByteArray((byte) 10);
     private static final byte[] lastClaimBlockIndexKey = Helper.toByteArray((byte) 11);
     private static final byte[] unaccountedRewardsKey = Helper.toByteArray((byte) 12);
     private static final byte[] taxAmountKey = Helper.toByteArray((byte) 13);
-    private static final byte[] totalVillainCandiesStakedKey = Helper.toByteArray((byte) 17);
+    private static final byte[] totalVillainsStakedKey = Helper.toByteArray((byte) 17);
     private static final byte[] tokensOfKey = Helper.toByteArray((byte) 18);
 
-    // CUSTOM METADATA
+    // METADATA VALUES
+    private static final String TYPE_VILLAIN = "Villain";
+
+    //
     private static final String SUGAR = "Sugar";
     private static final String GENERATION = "Generation";
     private static final String TYPE = "Type";
-    private static final String TYPE_VILLAIN = "Villain";
     private static final String ATTRIBUTES = "attributes";
-    private static final String TYPE_VILLAGER = "Villager";
     private static final String BONUS = "Claim Bonus";
 
     private static final StorageContext ctx = Storage.getStorageContext();
-    private static final StorageMap villainCandiesStake = new StorageMap(ctx, Helper.toByteArray((byte) 14));
-    private static final StorageMap villagerCandiesStake = new StorageMap(ctx, Helper.toByteArray((byte) 15));
-    private static final StorageMap ownerOfMap = new StorageMap(ctx, Helper.toByteArray((byte) 16));
-
-    /* RECEIVING PAYMENTS */
+    private static final StorageMap villainStakes = new StorageMap(ctx, Helper.toByteArray((byte) 101));
+    private static final StorageMap villagerStakes = new StorageMap(ctx, Helper.toByteArray((byte) 102));
+    private static final StorageMap ownerOfMap = new StorageMap(ctx, Helper.toByteArray((byte) 103));
 
     @OnNEP17Payment
-    public static void onPayment(Hash160 from, int amount, Object data) {
-        assert (from == owner()) : "onlyOwner";
-        assert (Runtime.getCallingScriptHash() == candyContractHash()) : "onlyCandy";
+    public static void onPayment(Hash160 from, int amount, Object data) throws Exception {
+        if (from != owner()) {
+            throw new Exception("onPayment_onlyOwner");
+        }
+        if (Runtime.getCallingScriptHash() != candyContractHash()) {
+            throw new Exception("onPayment_onlyCandy");
+
+        }
         onPayment.fire(from, amount, data);
     }
 
     @OnNEP11Payment
-    public static void onPayment(Hash160 sender, int amount, ByteString tokenId, Object data) {
-        assert (!isPaused()) : "isPaused";
-        assert (maxCandiesToEarn() > 0) : "empty treasury";
-        assert (Runtime.getCallingScriptHash() == nftContractHash()) : "invalid contract";
-
-        if (getTypeOfToken(tokenId) == TYPE_VILLAIN) {
-            int sugar = Integer.valueOf(getSugarOfToken(tokenId));
-            addVillainCandy(sender, tokenId, sugar);
+    public static void onPayment(Hash160 sender, int amount, ByteString tokenId, Object data) throws Exception {
+        if (isPaused()) {
+            throw new Exception("onPayment_isPaused");
+        }
+        if (candyBalance() <= 0) {
+            throw new Exception("onPayment_emptyTreasury");
+        }
+        if (Runtime.getCallingScriptHash() != nftContractHash()) {
+            throw new Exception("onPayment_invalidContract");
+        }
+        if (getTokenActions(tokenId) <= 0) {
+            throw new Exception("onPayment_noActionsLeft");
+        }
+        removeActionPoint(tokenId);
+        if (getTokenType(tokenId) == TYPE_VILLAIN) {
+            int level = getTokenLevel(tokenId);
+            int updatedLevelValue = level + 10;
+            stakeVillain(sender, tokenId, updatedLevelValue);
         } else {
-            addVillagerCandy(sender, tokenId);
+            stakeVillager(sender, tokenId);
         }
 
-        new StorageMap(ctx, createTokensOfPrefix(sender)).put(tokenId, 1);
+        new StorageMap(ctx, Utils.createStorageMapPrefix(sender, tokensOfKey)).put(tokenId, 1);
         ownerOfMap.put(tokenId, sender);
     }
 
-    public static int claim(ByteString[] tokenIds, boolean unstake, Hash160 receiver) {
-        assert (!isPaused()) : "isPaused";
+    public static int claim(ByteString[] tokenIds, boolean unstake) throws Exception {
+        if (isPaused()) {
+            throw new Exception("claim_isPaused");
+        }
+        if (tokenIds.length == 0) {
+            throw new Exception("claim_noTokenIdsProvided");
+        }
         updateEarnings();
-        int claimAmount = 0;
+        int totalEarnings = 0;
+        Hash160 owner = null;
         for (int i = 0; i < tokenIds.length; i++) {
-            Hash160 owner = getOwnerOfToken(tokenIds[i]);
-            assert (Runtime.checkWitness(owner) && owner == receiver) : "not owner";
-            assert (maxCandiesToEarn() > 0) : "no more candies to earn";
-            if (getTypeOfToken(tokenIds[i]) == TYPE_VILLAIN) {
-                int sugar = Integer.valueOf(getSugarOfToken(tokenIds[i]));
-                claimAmount += claimVillainCandy(tokenIds[i], unstake, sugar, owner);
+            owner = getOwnerOfToken(tokenIds[i]);
+            if (!Runtime.checkWitness(owner)) {
+                throw new Exception("claim_noAuth");
+            }
+            if (candyBalance() <= 0) {
+                throw new Exception("claim_emptyTreasury");
+            }
+            if (getTokenActions(tokenIds[i]) <= 0) {
+                throw new Exception("claim_noActionsLeft");
+            }
+            removeActionPoint(tokenIds[i]);
+            if (getTokenType(tokenIds[i]) == TYPE_VILLAIN) {
+                int level = getTokenLevel(tokenIds[i]);
+                totalEarnings += villainEarnings(tokenIds[i], unstake, level, owner);
             } else {
-                claimAmount += claimVillagerCandy(tokenIds[i], unstake, owner);
+                totalEarnings += villagerEarnings(tokenIds[i], unstake, owner);
             }
         }
-        if (claimAmount == 0) {
+        assert owner != null;
+        if (totalEarnings == 0) {
             return 0;
         }
-        transferCandy(receiver, claimAmount);
-        return claimAmount;
+        transferCandy(owner, totalEarnings);
+        return totalEarnings;
     }
 
-    private static void addVillainCandy(Hash160 owner, ByteString tokenId, int sugar) {
-        incrementTotalSugarStaked(sugar);
-        int candyPerSugar = candyPerSugar();
-        updateVillainCandyStake(tokenId, candyPerSugar);
+    private static void stakeVillain(Hash160 owner, ByteString tokenId, int level) {
+        incrementTotalSugarStaked(level);
+        int candyPerLevel = candyPerLevel();
+        updateVillainStake(tokenId, candyPerLevel);
         incrementTotalVillainCandiesStaked(1);
-        onTokenStaked.fire(owner, tokenId, candyPerSugar);
+        onTokenStaked.fire(owner, tokenId, candyPerLevel);
     }
 
-    private static void addVillagerCandy(Hash160 owner, ByteString tokenId) {
+    private static void stakeVillager(Hash160 owner, ByteString tokenId) {
         updateEarnings();
         int blockIndex = currentBlockIndex();
-        updateVillagerCandyStake(tokenId, blockIndex);
-        incrementTotalVillagerCandiesStaked(1);
+        updateVillagerStake(tokenId, blockIndex);
+        incTotalVillagersStaked(1);
         onTokenStaked.fire(owner, tokenId, blockIndex);
     }
 
-    private static int claimVillagerCandy(ByteString tokenId, boolean unstake, Hash160 owner) {
-        int stake = getVillagerCandyStake(tokenId);
-        int claimAmount = 0;
-        if (totalCandiesEarned() < maxCandiesToEarn()) {
-            claimAmount = (currentBlockIndex() - stake) * dailyCandyRate() / BLOCKS_PER_DAY;
+    private static int villagerEarnings(ByteString tokenId, boolean unstake, Hash160 owner) throws Exception {
+        int stake = villagerStake(tokenId);
+        int earnings = 0;
+        if (totalCandiesEarned() < candyBalance()) {
+            earnings = (currentBlockIndex() - stake) * dailyCandyRate() / BLOCKS_PER_DAY;
         } else {
-            claimAmount = (lastClaimBlockIndex() - stake) * dailyCandyRate() / BLOCKS_PER_DAY;
+            earnings = (lastClaimBlockIndex() - stake) * dailyCandyRate() / BLOCKS_PER_DAY;
         }
-        onDebug.fire(unstake);
         if (unstake) {
-            assert (currentBlockIndex() - stake >= minStakeBlockCount()) : "minimum stake duration not reached";
-            boolean stealAllCandies = Runtime.getRandom() % 2 == 0;
-            if (stealAllCandies) {
-                payTax(claimAmount);
-                claimAmount = 0;
+            if (currentBlockIndex() - stake < minStakeBlockCount()) {
+                throw new Exception("villagerEarnings_minStakeDuration");
             }
-            deleteVillagerCandyStake(tokenId);
-            decrementTotalVillagerCandiesStaked(1);
+            boolean loseCandiesToVillain = Runtime.getRandom() % 2 == 0;
+            if (loseCandiesToVillain) {
+                payTax(earnings);
+                earnings = 0;
+            }
+            deleteVillagerStake(tokenId);
+            decTotalVillagersStaked(1);
             deleteOwnerOfToken(tokenId);
-            new StorageMap(ctx, createTokensOfPrefix(owner)).delete(tokenId);
-            transferNFT(owner, tokenId);
+            new StorageMap(ctx, Utils.createStorageMapPrefix(owner, tokensOfKey)).delete(tokenId);
+            safeTransferNft(owner, tokenId);
         } else {
-            int taxedAmount = claimAmount * taxAmount() / 100;
+            int taxedAmount = earnings * taxAmount() / 100;
             payTax(taxedAmount);
-            claimAmount = claimAmount - taxedAmount;
-            updateVillagerCandyStake(tokenId, currentBlockIndex());
+            earnings = earnings - taxedAmount;
+            updateVillagerStake(tokenId, currentBlockIndex());
         }
-        onVillagerCandyClaim.fire(tokenId, claimAmount, unstake);
-        return claimAmount;
+        onVillagerClaim.fire(tokenId, earnings, unstake);
+        return earnings;
     }
 
-    private static int claimVillainCandy(ByteString tokenId, boolean unstake, int sugar, Hash160 owner) {
-        int stake = getVillainCandyStake(tokenId);
-        int claimAmount = sugar * (candyPerSugar() - stake);
+    private static int villainEarnings(ByteString tokenId, boolean unstake, int level, Hash160 owner) {
+        int stake = villainStake(tokenId);
+        int claimAmount = level * (candyPerLevel() - stake);
         if (unstake) {
-            decrementTotalSugarStaked(sugar);
-            deleteVillainCandyStake(tokenId);
-            decrementTotalVillainCandiesStaked(1);
+            decTotalLevelsStaked(level);
+            deleteVillainStake(tokenId);
+            decTotalVillainsStaked(1);
             deleteOwnerOfToken(tokenId);
-            new StorageMap(ctx, createTokensOfPrefix(owner)).delete(tokenId);
-            transferNFT(owner, tokenId);
+            new StorageMap(ctx, Utils.createStorageMapPrefix(owner, tokensOfKey)).delete(tokenId);
+            safeTransferNft(owner, tokenId);
         } else {
-            updateVillainCandyStake(tokenId, candyPerSugar());
+            updateVillainStake(tokenId, candyPerLevel());
         }
-        onVillainCandyClaim.fire(tokenId, claimAmount, unstake);
+        onVillainClaim.fire(tokenId, claimAmount, unstake);
         return claimAmount;
     }
 
     private static void payTax(int amount) {
-        if (totalSugarStaked() == 0) {
+        if (totalLevelsStaked() == 0) {
             incrementUnaccountedRewards(amount);
             return;
         }
-        int increment = (amount + unaccountedRewards()) / totalSugarStaked();
-        incrementCandyPerSugar(increment);
+        int increment = (amount + unaccountedRewards()) / totalLevelsStaked();
+        incCandyPerLevel(increment);
         resetUnaccountedRewards();
 
-    }
-
-    private static byte[] createTokensOfPrefix(Hash160 owner) {
-        return Helper.concat(tokensOfKey, owner.toByteArray());
     }
 
     @Safe
     public static List<String> tokensOf(Hash160 owner) throws Exception {
         Iterator<Struct<ByteString, ByteString>> iterator = (Iterator<Struct<ByteString, ByteString>>) Storage.find(
                 ctx.asReadOnly(),
-                createTokensOfPrefix(owner),
+                Utils.createStorageMapPrefix(owner, tokensOfKey),
                 FindOptions.RemovePrefix);
 
         List<String> tokens = new List();
@@ -235,16 +261,16 @@ public class CandyClashStaking {
     public static int availableClaimAmount(ByteString[] tokenIds) {
         int claimAmount = 0;
         for (int i = 0; i < tokenIds.length; i++) {
-            if (maxCandiesToEarn() == 0) {
+            if (candyBalance() == 0) {
                 return 0;
             }
-            if (getTypeOfToken(tokenIds[i]) == TYPE_VILLAIN) {
-                int sugarValue = Integer.valueOf(getSugarOfToken(tokenIds[i]));
-                int stake = getVillainCandyStake(tokenIds[i]);
-                claimAmount += sugarValue * (candyPerSugar() - stake);
+            if (getTokenType(tokenIds[i]) == TYPE_VILLAIN) {
+                int sugarValue = Integer.valueOf(getTokenLevel(tokenIds[i]));
+                int stake = villainStake(tokenIds[i]);
+                claimAmount += sugarValue * (candyPerLevel() - stake);
             } else {
-                int stake = getVillagerCandyStake(tokenIds[i]);
-                if (totalCandiesEarned() < maxCandiesToEarn()) {
+                int stake = villagerStake(tokenIds[i]);
+                if (totalCandiesEarned() < candyBalance()) {
                     // int claimBonus = stringToInt(properties.get(BONUS));
                     claimAmount += (currentBlockIndex() - stake) * dailyCandyRate() / BLOCKS_PER_DAY;
                 } else {
@@ -256,14 +282,24 @@ public class CandyClashStaking {
 
     }
 
-    private static String getSugarOfToken(ByteString tokenId) {
+    private static int removeActionPoint(ByteString tokenId) {
         Hash160 nftContract = nftContractHash();
-        return (String) Contract.call(nftContract, "getSugarOfToken", CallFlags.All, new Object[] { tokenId });
+        return (int) Contract.call(nftContract, "removeActionPoint", CallFlags.All, new Object[] { tokenId });
     }
 
-    private static String getTypeOfToken(ByteString tokenId) {
+    private static int getTokenActions(ByteString tokenId) {
         Hash160 nftContract = nftContractHash();
-        return (String) Contract.call(nftContract, "getTypeOfToken", CallFlags.All,
+        return (int) Contract.call(nftContract, "tokenActions", CallFlags.All, new Object[] { tokenId });
+    }
+
+    private static int getTokenLevel(ByteString tokenId) {
+        Hash160 nftContract = nftContractHash();
+        return (int) Contract.call(nftContract, "tokenLevel", CallFlags.All, new Object[] { tokenId });
+    }
+
+    private static String getTokenType(ByteString tokenId) {
+        Hash160 nftContract = nftContractHash();
+        return (String) Contract.call(nftContract, "tokenType", CallFlags.All,
                 new Object[] { tokenId });
     }
 
@@ -271,12 +307,12 @@ public class CandyClashStaking {
         return new Hash160(ownerOfMap.get(tokenId));
     }
 
-    public static void setPaused(int value) {
-        Storage.put(ctx, pausedKey, value);
+    public static void updatePause(boolean paused) {
+        Storage.put(ctx, isPausedKey, paused ? 1 : 0);
     }
 
     @Safe
-    public static int totalSugarStaked() {
+    public static int totalLevelsStaked() {
         return Storage.getIntOrZero(ctx, totalSugarStakedKey);
     }
 
@@ -286,17 +322,17 @@ public class CandyClashStaking {
     }
 
     @Safe
-    public static int totalVillagerCandiesStaked() {
-        return Storage.getIntOrZero(ctx, totalVillagerCandiesStakedKey);
+    public static int totalVillagersStaked() {
+        return Storage.getIntOrZero(ctx, totalVillagersStakedKey);
     }
 
     @Safe
-    public static int totalVillainCandiesStaked() {
-        return Storage.getIntOrZero(ctx, totalVillainCandiesStakedKey);
+    public static int totalVillainsStaked() {
+        return Storage.getIntOrZero(ctx, totalVillainsStakedKey);
     }
 
     @Safe
-    public static int maxCandiesToEarn() {
+    public static int candyBalance() {
         Hash160 candyContract = candyContractHash();
         return (int) Contract.call(candyContract, "balanceOf", CallFlags.All,
                 new Object[] { Runtime.getExecutingScriptHash() });
@@ -324,67 +360,69 @@ public class CandyClashStaking {
 
     @Safe
     public static boolean isPaused() {
-        return Storage.getInt(ctx, pausedKey) == 1 ? true : false;
+        return Storage.getInt(ctx, isPausedKey) == 1 ? true : false;
     }
 
-    private static void onlyOwner() {
-        assert (Runtime.checkWitness(owner())) : "onlyOwner";
+    private static void onlyOwner() throws Exception {
+        if (!Runtime.checkWitness(owner())) {
+            throw new Exception("onlyOwner");
+        }
     }
 
     private static void incrementTotalSugarStaked(int amount) {
-        Storage.put(ctx, totalSugarStakedKey, totalSugarStaked() + amount);
+        Storage.put(ctx, totalSugarStakedKey, totalLevelsStaked() + amount);
     }
 
-    private static void decrementTotalSugarStaked(int amount) {
-        Storage.put(ctx, totalSugarStakedKey, totalSugarStaked() - amount);
+    private static void decTotalLevelsStaked(int amount) {
+        Storage.put(ctx, totalSugarStakedKey, totalLevelsStaked() - amount);
     }
 
-    private static void incrementTotalVillagerCandiesStaked(int amount) {
-        Storage.put(ctx, totalVillagerCandiesStakedKey, totalVillagerCandiesStaked() + amount);
+    private static void incTotalVillagersStaked(int amount) {
+        Storage.put(ctx, totalVillagersStakedKey, totalVillagersStaked() + amount);
     }
 
-    private static void decrementTotalVillagerCandiesStaked(int amount) {
-        Storage.put(ctx, totalVillagerCandiesStakedKey, totalVillagerCandiesStaked() - amount);
+    private static void decTotalVillagersStaked(int amount) {
+        Storage.put(ctx, totalVillagersStakedKey, totalVillagersStaked() - amount);
     }
 
     private static void incrementTotalVillainCandiesStaked(int amount) {
-        Storage.put(ctx, totalVillainCandiesStakedKey, totalVillainCandiesStaked() + amount);
+        Storage.put(ctx, totalVillainsStakedKey, totalVillainsStaked() + amount);
     }
 
-    private static void decrementTotalVillainCandiesStaked(int amount) {
-        Storage.put(ctx, totalVillainCandiesStakedKey, totalVillagerCandiesStaked() - amount);
+    private static void decTotalVillainsStaked(int amount) {
+        Storage.put(ctx, totalVillainsStakedKey, totalVillagersStaked() - amount);
     }
 
     private static void incrementTotalCandiesEarned(int amount) {
         Storage.put(ctx, totalCandiesEarnedKey, totalCandiesEarned() + amount);
     }
 
-    private static void updateVillainCandyStake(ByteString tokenId, int value) {
-        villainCandiesStake.put(tokenId, value);
+    private static void updateVillainStake(ByteString tokenId, int value) {
+        villainStakes.put(tokenId, value);
     }
 
-    private static void updateVillagerCandyStake(ByteString tokenId, int value) {
-        villagerCandiesStake.put(tokenId, value);
+    private static void updateVillagerStake(ByteString tokenId, int value) {
+        villagerStakes.put(tokenId, value);
     }
 
-    private static int getVillagerCandyStake(ByteString tokenId) {
-        return villagerCandiesStake.getInt(tokenId);
+    private static int villagerStake(ByteString tokenId) {
+        return villagerStakes.getInt(tokenId);
     }
 
-    private static int getVillainCandyStake(ByteString tokenId) {
-        return villainCandiesStake.getInt(tokenId);
+    private static int villainStake(ByteString tokenId) {
+        return villainStakes.getInt(tokenId);
     }
 
-    private static void deleteVillainCandyStake(ByteString tokenId) {
-        villainCandiesStake.delete(tokenId);
+    private static void deleteVillainStake(ByteString tokenId) {
+        villainStakes.delete(tokenId);
     }
 
     private static void deleteOwnerOfToken(ByteString tokenId) {
         ownerOfMap.delete(tokenId);
     }
 
-    private static void deleteVillagerCandyStake(ByteString tokenId) {
-        villagerCandiesStake.delete(tokenId);
+    private static void deleteVillagerStake(ByteString tokenId) {
+        villagerStakes.delete(tokenId);
     }
 
     private static int lastClaimBlockIndex() {
@@ -407,7 +445,7 @@ public class CandyClashStaking {
         Storage.put(ctx, unaccountedRewardsKey, 0);
     }
 
-    private static int candyPerSugar() {
+    private static int candyPerLevel() {
         return Storage.getIntOrZero(ctx, candyPerSugarKey);
     }
 
@@ -419,8 +457,8 @@ public class CandyClashStaking {
         return new Hash160(Storage.get(ctx, nftContractkey));
     }
 
-    private static void incrementCandyPerSugar(int amount) {
-        Storage.put(ctx, candyPerSugarKey, candyPerSugar() + amount);
+    private static void incCandyPerLevel(int amount) {
+        Storage.put(ctx, candyPerSugarKey, candyPerLevel() + amount);
 
     }
 
@@ -430,7 +468,7 @@ public class CandyClashStaking {
                 new Object[] { Runtime.getExecutingScriptHash(), to, amount, null });
     }
 
-    private static void transferNFT(Hash160 to, ByteString tokenId) {
+    private static void safeTransferNft(Hash160 to, ByteString tokenId) {
         Hash160 nftContract = nftContractHash();
         Contract.call(nftContract, "transfer", CallFlags.All,
                 new Object[] { to, tokenId, null });
@@ -441,8 +479,8 @@ public class CandyClashStaking {
     }
 
     private static void updateEarnings() {
-        if (totalCandiesEarned() < maxCandiesToEarn()) {
-            int amount = (currentBlockIndex() - lastClaimBlockIndex()) * totalVillagerCandiesStaked()
+        if (totalCandiesEarned() < candyBalance()) {
+            int amount = (currentBlockIndex() - lastClaimBlockIndex()) * totalVillagersStaked()
                     * dailyCandyRate();
             if (amount != 0) {
                 amount = amount / BLOCKS_PER_DAY;
@@ -455,14 +493,14 @@ public class CandyClashStaking {
 
     /* ONLY OWNER METHODS */
 
-    public static void updateNftContract(Hash160 nftContract) {
+    public static void updateNftContract(Hash160 nftContract) throws Exception {
         onlyOwner();
         Storage.put(ctx, nftContractkey, nftContract);
     }
 
     /* CONTRACT MANAGEMENT */
 
-    public static void update(ByteString script, String manifest) {
+    public static void update(ByteString script, String manifest) throws Exception {
         onlyOwner();
         ContractManagement.update(script, manifest);
     }
@@ -471,14 +509,13 @@ public class CandyClashStaking {
     public static void deploy(Object data, boolean update) {
         Object[] arr = (Object[]) data;
         if (!update) {
-            // TODO: add checks
             Storage.put(ctx, ownerKey, (Hash160) arr[0]);
             Storage.put(ctx, nftContractkey, (Hash160) arr[1]);
             Storage.put(ctx, minStakeBlockCountKey, (int) arr[2]);
             Storage.put(ctx, candiesContractKey, (Hash160) arr[3]);
             Storage.put(ctx, dailyCandyRateKey, (int) arr[4]);
             Storage.put(ctx, taxAmountKey, (int) arr[5]);
-            Storage.put(ctx, pausedKey, (int) arr[6]);
+            Storage.put(ctx, isPausedKey, (int) arr[6]);
         }
     }
 

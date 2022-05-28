@@ -37,7 +37,7 @@ import static io.neocandy.games.candyclash.Utils.generateName;
 @ManifestExtra(key = "author", value = "NeoCandy")
 @ManifestExtra(key = "description", value = "CandyClash NFT Collection")
 @ManifestExtra(key = "email", value = "hello@neocandy.io")
-@Permission(contract = "*", methods = { "totalVillainCandiesStaked", "onNEP11Payment", "transfer" })
+@Permission(contract = "*", methods = { "totalVillainsStaked", "onNEP11Payment", "transfer" })
 @Permission(nativeContract = NativeContract.ContractManagement)
 public class CandyClashNFT {
 
@@ -52,7 +52,7 @@ public class CandyClashNFT {
     @DisplayName("Transfer")
     static Event4Args<Hash160, Hash160, Integer, ByteString> onTransfer;
 
-    @DisplayName("onPayment")
+    @DisplayName("Payment")
     static Event3Args<Hash160, Integer, Object> onPayment;
 
     @DisplayName("LevelUp")
@@ -87,8 +87,8 @@ public class CandyClashNFT {
     private static final String TYPE_VILLAGER = "Villager";
     private static final String ORIGIN_SWEETGLEN = "Sweetglen";
     private static final String ORIGIN_CANEMOR = "Canemor";
-    private static final String GEN_0 = "0";
-    private static final String GEN_1 = "1";
+    private static final int GEN_0 = 0;
+    private static final int GEN_1 = 1;
 
     // GM related properties
     private static final String PROPERTIES = "properties";
@@ -162,12 +162,11 @@ public class CandyClashNFT {
             throw new Exception("onPayment_invalidCandyAmount");
         }
 
-        String generation = GEN_0;
+        int generation = GEN_0;
         if (totalSupply() >= maxGenesisAmount()) {
             generation = GEN_1;
         }
         mint(from, generation);
-        burn(amount);
         onPayment.fire(from, amount, data);
     }
 
@@ -279,7 +278,7 @@ public class CandyClashNFT {
         if (iTokenProps == null) {
             throw new Exception("properties_tokenDoesNotExist");
         }
-
+        p.put(TOKEN_ID, iTokenProps.getTokenId());
         p.put(NAME, iTokenProps.getName());
         p.put(DESC, iTokenProps.getDescription());
         p.put(IMAGE, iTokenProps.getImage());
@@ -290,15 +289,15 @@ public class CandyClashNFT {
         properties.put(PROPERTY_TYPE, PROPERTY_GAME_TYPE);
         p.put(PROPERTIES, properties);
 
-        List<Map<String, String>> attributes = new List<>();
+        List<Map<String, Object>> attributes = new List<>();
         attributes.add(getAttributeMap(TYPE, iTokenProps.getType()));
         attributes.add(getAttributeMap(GENERATION, iTokenProps.getGeneration()));
         attributes.add(getAttributeMap(ORIGIN, iTokenProps.getOrigin()));
-        attributes.add(getAttributeMap(SUGAR, sugarValues.get(tokenId).toString()));
+        attributes.add(getAttributeMap(SUGAR, sugarValues.getInt(tokenId)));
         attributes.add(getAttributeMap(BONUS, bonusValues.get(tokenId).toString() + "%"));
-        attributes.add(getAttributeMap(HEALTH, healthValues.get(tokenId).toString()));
-        attributes.add(getAttributeMap(LEVEL, levelValues.get(tokenId).toString()));
-        attributes.add(getAttributeMap(ACTIONS, actionPointValues.get(tokenId).toString()));
+        attributes.add(getAttributeMap(HEALTH, healthValues.getInt(tokenId)));
+        attributes.add(getAttributeMap(LEVEL, levelValues.getInt(tokenId)));
+        attributes.add(getAttributeMap(ACTIONS, actionPointValues.getInt(tokenId)));
         p.put(ATTRIBUTES, attributes);
 
         return p;
@@ -358,17 +357,46 @@ public class CandyClashNFT {
 
     @Safe
     public static int pricePerExperiencePoint() {
-        return (int) Storage.getInt(ctx, pricePerXpKey);
+        return Storage.getInt(ctx, pricePerXpKey);
     }
 
     @Safe
     public static int pricePerActionPoint() {
-        return (int) Storage.getInt(ctx, actionPointPriceKey);
+        return Storage.getInt(ctx, actionPointPriceKey);
     }
 
     @Safe
     public static int[] actionPointsLevelTable() {
         return (int[]) StdLib.deserialize(Storage.get(ctx, actionPointsPerLevelTableKey));
+    }
+
+    // called by the staking contract
+    @Safe
+    public static String tokenType(ByteString tokenId) throws Exception {
+        ByteString iTokenProps = immutableTokenProperties.get(tokenId);
+        if (iTokenProps == null) {
+            throw new Exception("tokenType_tokenDoesNotExist");
+        }
+        return ((ImmutableTokenProperties) StdLib.deserialize(iTokenProps)).type;
+    }
+
+    // called by the staking contract
+    @Safe
+    public static int tokenLevel(ByteString tokenId) throws Exception {
+        ByteString level = levelValues.get(tokenId);
+        if (level == null) {
+            throw new Exception("tokenLevel_tokenDoesNotExist");
+        }
+        return level.toInt();
+    }
+
+    @Safe
+    public static int tokenActions(ByteString tokenId) throws Exception {
+        ByteString actions = actionPointValues.get(tokenId);
+        if (actions == null) {
+            throw new Exception("tokenLevel_tokenDoesNotExist");
+        }
+        return actions.toInt();
     }
 
     /* READ & WRITE */
@@ -396,15 +424,16 @@ public class CandyClashNFT {
     }
 
     public static void addExperienceToToken(ByteString tokenId, int amount) throws Exception {
+        // only works when unstaked
         Hash160 owner = ownerOf(tokenId);
         if (!Runtime.checkWitness(owner)) {
             throw new Exception("addExperienceToToken_noAuth");
         }
         int currentXp = sugarValues.getInt(tokenId);
         int currentLevel = levelValues.getInt(tokenId);
-        int[] table = experienceTable();
-        int max = table[table.length - 1];
-        if (currentXp + amount > max || amount < 1) {
+        int[] xpTable = experienceTable();
+        int xpLimit = xpTable[xpTable.length - 1];
+        if (currentXp + amount > xpLimit || amount < 1) {
             throw new Exception("addExperienceToToken_invalidAmount");
         }
         int price = pricePerExperiencePoint();
@@ -426,10 +455,12 @@ public class CandyClashNFT {
         onExperienceIncreased.fire(tokenId, amount);
     }
 
-    public static void addActionPoint(ByteString tokenId, int amount) throws Exception {
+    public static void addActionPoints(ByteString tokenId, int amount) throws Exception {
         // TODO: right now anyone can gift action points, should be okay
-        int currentActionPoints = actionPointValues.getInt(tokenId);
-        int maxActionPoints = actionPointsLevelTable()[levelValues.getInt(tokenId)];
+        int currentActionPoints = tokenActions(tokenId);
+        int[] actionPointsTable = actionPointsLevelTable();
+        int maxActionPoints = actionPointsTable[tokenLevel(tokenId) - 1];
+
         if (maxActionPoints == currentActionPoints) {
             throw new Exception("addActionPoint_alreadyMaxActionPoints");
         }
@@ -439,23 +470,28 @@ public class CandyClashNFT {
             }
         }
 
-        safeTransferCandy(Runtime.getCallingScriptHash(), Runtime.getExecutingScriptHash(),
+        safeTransferCandy(Runtime.getCallingScriptHash(),
+                Runtime.getExecutingScriptHash(),
                 amount * pricePerActionPoint());
         int newActionPoints = currentActionPoints + amount;
         actionPointValues.put(tokenId, newActionPoints);
+
         onActionPointAdded.fire(tokenId, amount);
+    }
+
+    public static void removeActionPoint(ByteString tokenId) throws Exception {
+        onlyStakingContract();
+        ByteString actionPointValue = actionPointValues.get(tokenId);
+        if (actionPointValue == null) {
+            throw new Exception("removeActionPoint_tokenDoesNotExist");
+        }
+        int current = actionPointValue.toInt();
+        actionPointValues.put(tokenId, current - 1);
     }
 
     /* UTIL */
 
-    private static void burn(int amount) throws Exception {
-        safeTransferCandy(Runtime.getExecutingScriptHash(), Hash160.zero(), amount);
-    }
-
     private static void safeTransferCandy(Hash160 from, Hash160 to, int amount) throws Exception {
-        if (!Runtime.checkWitness(from)) {
-            throw new Exception("safeTransfer_noAuth");
-        }
         Contract.call(candyContract(), "transfer", CallFlags.All,
                 new Object[] { from, Runtime.getExecutingScriptHash(), amount, null });
     }
@@ -472,11 +508,11 @@ public class CandyClashNFT {
         return level;
     }
 
-    private static void mint(Hash160 owner, String gen) throws Exception {
+    private static void mint(Hash160 owner, int gen) throws Exception {
         int totalSupply = totalSupply();
         String ts = StdLib.jsonSerialize(++totalSupply);
         ByteString tokenId = new ByteString(ts);
-        Map<String, String> properties = new Map<>();
+        Map<String, Object> properties = new Map<>();
         properties.put(TOKEN_ID, ts);
         properties.put(DESC, "This candy is part of the Candyclash NFT collection.");
         properties.put(IMAGE, getImageBaseURI() + "/" + tokenId + ".png");
@@ -484,7 +520,7 @@ public class CandyClashNFT {
         properties.put(GENERATION, gen);
 
         // there is a 10% chance that a new gen 1 mint can be stolen
-        if (gen == "1") {
+        if (gen == 1) {
             boolean steal = Runtime.getRandom() % 10 == 0;
             if (steal) {
                 new StorageMap(ctx, createStorageMapPrefix(owner, lostNftsKey)).put(tokenId, 1);
@@ -495,10 +531,10 @@ public class CandyClashNFT {
         }
         boolean isEvil = Runtime.getRandom() % 10 == 0;
         properties.put(NAME, generateName(isEvil));
-        properties.put(LEVEL, "1");
-        properties.put(SUGAR, "0");
-        properties.put(HEALTH, "100"); // RANDOMIZE
-        properties.put(ACTIONS, "1");
+        properties.put(LEVEL, 1);
+        properties.put(SUGAR, 0);
+        properties.put(HEALTH, 100);
+        properties.put(ACTIONS, 1);
         int randBonus = randomBonusClaimAmount();
         String bonus = StdLib.jsonSerialize(randBonus);
         properties.put(BONUS, bonus);
@@ -556,7 +592,7 @@ public class CandyClashNFT {
      * @return the owner hash of a random villain NFT owner
      */
     private static Hash160 randomVillainCandyOwner() {
-        int rand = randomNumber(totalVillainCandiesStaked());
+        int rand = randomNumber(totalVillainsStaked());
         Iterator<ByteString> iter = villains.find(FindOptions.ValuesOnly);
         int count = 0;
         while (iter.next()) {
@@ -568,8 +604,8 @@ public class CandyClashNFT {
         return null;
     }
 
-    private static int totalVillainCandiesStaked() {
-        return (int) Contract.call(stakingContract(), "totalVillainCandiesStaked", CallFlags.All, new Object[0]);
+    private static int totalVillainsStaked() {
+        return (int) Contract.call(stakingContract(), "totalVillainsStaked", CallFlags.All, new Object[0]);
     }
 
     private static Hash160 stakingContract() {
@@ -582,7 +618,7 @@ public class CandyClashNFT {
         return result != null ? new Hash160(result) : null;
     }
 
-    private static void saveProperties(Map<String, String> properties, ByteString tokenId) throws Exception {
+    private static void saveProperties(Map<String, Object> properties, ByteString tokenId) throws Exception {
 
         if (!properties.containsKey(NAME)) {
             throw new Exception("saveProperties_missingName");
@@ -628,32 +664,38 @@ public class CandyClashNFT {
             throw new Exception("saveProperties_missingBonus");
         }
 
-        String name = properties.get(NAME);
-        String desc = properties.get(DESC);
-        String img = properties.get(IMAGE);
-        String uri = properties.get(TOKEN_URI);
-        String type = properties.get(TYPE);
-        String generation = properties.get(GENERATION);
-        String origin = properties.get(ORIGIN);
+        if (!properties.containsKey(ACTIONS)) {
+            throw new Exception("saveProperties_missingActions");
+        }
 
-        ImmutableTokenProperties iTokenProps = new ImmutableTokenProperties(tokenId.toString(), name, img, desc, uri,
+        String name = (String) properties.get(NAME);
+        String desc = (String) properties.get(DESC);
+        String img = (String) properties.get(IMAGE);
+        String uri = (String) properties.get(TOKEN_URI);
+        String type = (String) properties.get(TYPE);
+        int generation = (int) properties.get(GENERATION);
+        String origin = (String) properties.get(ORIGIN);
+
+        ImmutableTokenProperties iTokenProps = new ImmutableTokenProperties(tokenId, name, img, desc, uri,
                 type, origin,
                 generation);
         immutableTokenProperties.put(tokenId, StdLib.serialize(iTokenProps));
 
-        String sugar = properties.get(SUGAR);
-        String level = properties.get(LEVEL);
-        String health = properties.get(HEALTH);
-        String bonus = properties.get(BONUS);
+        int sugar = (int) properties.get(SUGAR);
+        int level = (int) properties.get(LEVEL);
+        int health = (int) properties.get(HEALTH);
+        int bonus = (int) properties.get(BONUS);
+        int actions = (int) properties.get(ACTIONS);
 
         sugarValues.put(tokenId, sugar);
         levelValues.put(tokenId, level);
         healthValues.put(tokenId, health);
         bonusValues.put(tokenId, bonus);
+        actionPointValues.put(tokenId, actions);
     }
 
-    private static Map<String, String> getAttributeMap(String trait, String value) {
-        Map<String, String> m = new Map<>();
+    private static Map<String, Object> getAttributeMap(String trait, Object value) {
+        Map<String, Object> m = new Map<>();
         m.put(ATTRIBUTE_TRAIT_TYPE, trait);
         m.put(ATTRIBUTE_VALUE, value);
         m.put(ATTRIBUTE_DISPLAY_TYPE, "");
@@ -689,6 +731,12 @@ public class CandyClashNFT {
     private static void onlyOwner() throws Exception {
         if (!Runtime.checkWitness(contractOwner())) {
             throw new Exception("onlyOwner");
+        }
+    }
+
+    private static void onlyStakingContract() throws Exception {
+        if (!Runtime.checkWitness(stakingContract())) {
+            throw new Exception("onlyStakingContract");
         }
     }
 
@@ -733,6 +781,11 @@ public class CandyClashNFT {
     public static void updateActionPointsTable(int[] actionPointsTable) throws Exception {
         onlyOwner();
         Storage.put(ctx, actionPointsPerLevelTableKey, StdLib.serialize(actionPointsTable));
+    }
+
+    public static void burn(int amount) throws Exception {
+        onlyOwner();
+        safeTransferCandy(Runtime.getExecutingScriptHash(), Hash160.zero(), amount);
     }
 
     /* CONTRACT MANAGEMENT */

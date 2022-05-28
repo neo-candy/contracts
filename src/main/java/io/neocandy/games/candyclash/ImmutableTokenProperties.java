@@ -1,22 +1,23 @@
 package io.neocandy.games.candyclash;
 
+import io.neow3j.devpack.ByteString;
 import io.neow3j.devpack.annotations.Struct;
 
 @Struct
 public class ImmutableTokenProperties {
 
-    String tokenId;
+    ByteString tokenId;
     String name;
     String image;
     String description;
     String tokenUri;
     String type;
     String origin;
-    String generation;
+    int generation;
 
-    public ImmutableTokenProperties(String tokenId, String name, String image, String description, String tokenUri,
+    public ImmutableTokenProperties(ByteString tokenId, String name, String image, String description, String tokenUri,
             String type,
-            String origin, String generation) {
+            String origin, int generation) {
         this.tokenId = tokenId;
         this.name = name;
         this.image = image;
@@ -27,7 +28,7 @@ public class ImmutableTokenProperties {
         this.generation = generation;
     }
 
-    public String getTokenId() {
+    public ByteString getTokenId() {
         return this.tokenId;
     }
 
@@ -51,7 +52,7 @@ public class ImmutableTokenProperties {
         return this.origin;
     }
 
-    public String getGeneration() {
+    public int getGeneration() {
         return this.generation;
     }
 
