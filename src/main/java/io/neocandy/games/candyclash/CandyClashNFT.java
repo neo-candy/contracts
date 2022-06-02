@@ -111,7 +111,7 @@ public class CandyClashNFT {
     // STORAGE KEYS
     private static final byte[] ownerkey = Helper.toByteArray((byte) 1);
     private static final byte[] totalSupplyKey = Helper.toByteArray((byte) 2);
-    private static final byte[] nftPriceKey = Helper.toByteArray((byte) 3);
+    private static final byte[] nftPriceTableKey = Helper.toByteArray((byte) 3);
     private static final byte[] candyContractHashKey = Helper.toByteArray((byte) 4);
     private static final byte[] tokensOfKey = Helper.toByteArray((byte) 5);
     private static final byte[] imageBaseUriKey = Helper.toByteArray((byte) 6);
@@ -150,23 +150,53 @@ public class CandyClashNFT {
         if (stakingContract() == null) {
             throw new Exception("onPayment_missingStakingContract");
         }
-        if (totalSupply() >= maxTokensAmount()) {
-            throw new Exception("onPayment_soldOut");
+        if (amount <= 0) {
+            throw new Exception("onPayment_invalidAmount");
         }
         Hash160 token = Runtime.getCallingScriptHash();
 
         if (token != candyContract()) {
             throw new Exception("onPayment_onlyCandy");
         }
-        if (amount != nftPriceCandy()) {
-            throw new Exception("onPayment_invalidCandyAmount");
-        }
+        if (data == null) {
+            if (totalSupply() >= maxTokensAmount()) {
+                throw new Exception("onPayment_soldOut");
+            }
+            int generation = GEN_0;
+            if (totalSupply() >= maxGenesisAmount()) {
+                generation = GEN_1;
+            }
 
-        int generation = GEN_0;
-        if (totalSupply() >= maxGenesisAmount()) {
-            generation = GEN_1;
+            if (amount != nftPricesCandy()[generation]) {
+                throw new Exception("onPayment_invalidCandyAmount");
+            }
+            mint(from, generation);
+        } else {
+            Object[] d = (Object[]) data;
+            ByteString tokenId = (ByteString) d[0];
+            Hash160 owner = ownerOf(tokenId);
+            String action = (String) d[1];
+            if (action == "addExperienceToToken") {
+                if (owner != from) {
+                    throw new Exception("addExperienceToToken_noAuth");
+                }
+                int pricePerXp = pricePerExperiencePoint();
+                if (amount % pricePerXp != 0) {
+                    throw new Exception("onPayment_addExperienceToToken_invalidAmont");
+                }
+                int xp = amount / pricePerXp;
+                addExperienceToToken(tokenId, xp);
+            } else if (action == "addActionPoints") {
+                int pricePerAction = pricePerActionPoint();
+                if (amount % pricePerAction != 0) {
+                    throw new Exception("onPayment_addActionPoints_invalidAmont");
+                }
+                int actionPoints = amount / pricePerAction;
+                addActionPoints(tokenId, actionPoints);
+            } else {
+                throw new Exception("onPayment_invalidAction");
+            }
         }
-        mint(from, generation);
         onPayment.fire(from, amount, data);
     }
 
@@ -229,8 +259,8 @@ public class CandyClashNFT {
     }
 
     @Safe
-    public static int nftPriceCandy() {
-        return Storage.getInt(ctx, nftPriceKey);
+    public static int[] nftPricesCandy() {
+        return (int[]) StdLib.deserialize(Storage.get(ctx, nftPriceTableKey));
     }
 
     @Safe
@@ -406,7 +436,6 @@ public class CandyClashNFT {
         if (owner == null) {
             throw new Exception("transfer_tokenDoesNotExist");
         }
-        onlyOwner();
         ownerOfMap.put(tokenId, to.toByteArray());
         new StorageMap(ctx, createStorageMapPrefix(owner, tokensOfKey)).delete(tokenId);
         new StorageMap(ctx, createStorageMapPrefix(to, tokensOfKey)).put(tokenId, 1);
@@ -423,12 +452,20 @@ public class CandyClashNFT {
         return true;
     }
 
-    public static void addExperienceToToken(ByteString tokenId, int amount) throws Exception {
-        // only works when unstaked
-        Hash160 owner = ownerOf(tokenId);
-        if (!Runtime.checkWitness(owner)) {
-            throw new Exception("addExperienceToToken_noAuth");
+    public static void removeActionPoint(ByteString tokenId) throws Exception {
+        onlyStakingContract();
+        ByteString actionPointValue = actionPointValues.get(tokenId);
+        if (actionPointValue == null) {
+            throw new Exception("removeActionPoint_tokenDoesNotExist");
         }
+        int current = actionPointValue.toInt();
+        actionPointValues.put(tokenId, current - 1);
+    }
+
+    /* UTIL */
+
+    private static void addExperienceToToken(ByteString tokenId, int amount) throws Exception {
+        // only works when unstaked
         int currentXp = sugarValues.getInt(tokenId);
         int currentLevel = levelValues.getInt(tokenId);
         int[] xpTable = experienceTable();
@@ -436,18 +473,17 @@ public class CandyClashNFT {
         if (currentXp + amount > xpLimit || amount < 1) {
             throw new Exception("addExperienceToToken_invalidAmount");
         }
-        int price = pricePerExperiencePoint();
-        safeTransferCandy(owner, Runtime.getExecutingScriptHash(), amount * price);
         int newExp = currentXp + amount;
         sugarValues.put(tokenId, newExp);
         int newLevel = getLevelForXp(newExp);
-        levelValues.put(tokenId, getLevelForXp(newExp));
+        levelValues.put(tokenId, newLevel);
         int levelDelta = newLevel - currentLevel;
         if (levelDelta > 0) {
             int currentActionPoints = actionPointValues.getInt(tokenId);
             int maxActionPoints = actionPointsLevelTable()[newLevel];
             if (maxActionPoints >= currentActionPoints + levelDelta) {
-                actionPointValues.put(tokenId, currentActionPoints + levelDelta);
+                // actionPointValues.put(tokenId, currentActionPoints + levelDelta);
+                actionPointValues.put(tokenId, maxActionPoints);
                 onActionPointAdded.fire(tokenId, levelDelta);
             }
             onLevelUp.fire(tokenId, newLevel);
@@ -455,7 +491,7 @@ public class CandyClashNFT {
         onExperienceIncreased.fire(tokenId, amount);
     }
 
-    public static void addActionPoints(ByteString tokenId, int amount) throws Exception {
+    private static void addActionPoints(ByteString tokenId, int amount) throws Exception {
         // TODO: right now anyone can gift action points, should be okay
         int currentActionPoints = tokenActions(tokenId);
         int[] actionPointsTable = actionPointsLevelTable();
@@ -470,26 +506,10 @@ public class CandyClashNFT {
             }
         }
 
-        safeTransferCandy(Runtime.getCallingScriptHash(),
-                Runtime.getExecutingScriptHash(),
-                amount * pricePerActionPoint());
         int newActionPoints = currentActionPoints + amount;
         actionPointValues.put(tokenId, newActionPoints);
-
         onActionPointAdded.fire(tokenId, amount);
     }
-
-    public static void removeActionPoint(ByteString tokenId) throws Exception {
-        onlyStakingContract();
-        ByteString actionPointValue = actionPointValues.get(tokenId);
-        if (actionPointValue == null) {
-            throw new Exception("removeActionPoint_tokenDoesNotExist");
-        }
-        int current = actionPointValue.toInt();
-        actionPointValues.put(tokenId, current - 1);
-    }
-
-    /* UTIL */
 
     private static void safeTransferCandy(Hash160 from, Hash160 to, int amount) throws Exception {
         Contract.call(candyContract(), "transfer", CallFlags.All,
@@ -498,10 +518,10 @@ public class CandyClashNFT {
 
     private static int getLevelForXp(int xp) {
         int[] table = experienceTable();
-        int level = 1;
+        int level = table.length + 1;
         for (int i = 0; i < table.length; i++) {
-            if (table[i] >= xp) {
-                level = i;
+            if (table[i] > xp) {
+                level = i + 1;
                 break;
             }
         }
@@ -747,9 +767,12 @@ public class CandyClashNFT {
         Storage.put(ctx, stakingContractHashKey, contract);
     }
 
-    public static void updateCandyPrice(int amount) throws Exception {
+    public static void updateCandyPriceTable(int[] table) throws Exception {
         onlyOwner();
-        Storage.put(ctx, nftPriceKey, amount);
+        if (table.length < 2) {
+            throw new Exception("updateCandyPriceTable_invalidTableLength");
+        }
+        Storage.put(ctx, nftPriceTableKey, StdLib.serialize(table));
     }
 
     public static void updateImageBaseURI(String uri) throws Exception {
@@ -757,12 +780,29 @@ public class CandyClashNFT {
         Storage.put(ctx, imageBaseUriKey, uri);
     }
 
+    public static void updateMaxTokensAmount(int amount) throws Exception {
+        onlyOwner();
+        if (amount < maxGenesisAmount() || amount <= 0) {
+            throw new Exception("updateMaxTokensAmount_invalidAmount");
+        }
+        Storage.put(ctx, maxTokensAmountKey, amount);
+    }
+
+    // TODO: pass an int array with generation mints [0, 2000, 8000 etc]
     public static void updateMaxGenesisAmount(int amount) throws Exception {
         onlyOwner();
-        if (amount >= maxTokensAmount()) {
+        if (amount >= maxTokensAmount() || amount <= 0) {
             throw new Exception("updateMaxGenesisAmount_invalidAmount");
         }
         Storage.put(ctx, maxGenesisAmountKey, amount);
+    }
+
+    public static void updatePricePerXp(int amount) throws Exception {
+        onlyOwner();
+        if (amount <= 0) {
+            throw new Exception("updatePricePerXp_invalidAmount");
+        }
+        Storage.put(ctx, pricePerXpKey, amount);
     }
 
     public static void updatePause(boolean paused) throws Exception {
@@ -802,11 +842,11 @@ public class CandyClashNFT {
             }
             Storage.put(ctx, ownerkey, owner);
 
-            int candyPrice = (int) arr[1];
-            if (candyPrice < stringToInt("5000000000000")) {
-                throw new Exception("deploy_invalidCandyPriceAmount");
+            int[] candyPriceTable = (int[]) arr[1];
+            if (candyPriceTable.length < 2) {
+                throw new Exception("deploy_invalidCandyPriceTableLength");
             }
-            Storage.put(ctx, nftPriceKey, candyPrice);
+            Storage.put(ctx, nftPriceTableKey, StdLib.serialize(candyPriceTable));
 
             Hash160 candyHash = (Hash160) arr[2];
             if (!Hash160.isValid(candyHash)) {
@@ -874,9 +914,7 @@ public class CandyClashNFT {
             if (actionPointsLevelTable.length == 0) {
                 throw new Exception("deploy_actionPointsLevelTable");
             }
-            // for each level there should be an action point entry in the table and the xp
-            // table contains the xp values starting from level 2
-            if (actionPointsLevelTable.length != xpTable.length + 1) {
+            if (actionPointsLevelTable.length != xpTable.length) {
                 throw new Exception("deploy_actionPointsLevelTableLength");
             }
             Storage.put(ctx, actionPointsPerLevelTableKey, StdLib.serialize(actionPointsLevelTable));

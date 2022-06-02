@@ -41,7 +41,7 @@ public class CandyClashStaking {
     @DisplayName("TokenStaked")
     private static Event3Args<Hash160, ByteString, Integer> onTokenStaked;
 
-    @DisplayName("OnPayment")
+    @DisplayName("OnNep17Payment")
     static Event3Args<Hash160, Integer, Object> onPayment;
 
     @DisplayName("VillagerClaimed")
@@ -140,10 +140,6 @@ public class CandyClashStaking {
             if (candyBalance() <= 0) {
                 throw new Exception("claim_emptyTreasury");
             }
-            if (getTokenActions(tokenIds[i]) <= 0) {
-                throw new Exception("claim_noActionsLeft");
-            }
-            removeActionPoint(tokenIds[i]);
             if (getTokenType(tokenIds[i]) == TYPE_VILLAIN) {
                 int level = getTokenLevel(tokenIds[i]);
                 totalEarnings += villainEarnings(tokenIds[i], unstake, level, owner);
@@ -163,7 +159,7 @@ public class CandyClashStaking {
         incrementTotalSugarStaked(level);
         int candyPerLevel = candyPerLevel();
         updateVillainStake(tokenId, candyPerLevel);
-        incrementTotalVillainCandiesStaked(1);
+        incTotalVillainsStaked(1);
         onTokenStaked.fire(owner, tokenId, candyPerLevel);
     }
 
@@ -184,6 +180,10 @@ public class CandyClashStaking {
             earnings = (lastClaimBlockIndex() - stake) * dailyCandyRate() / BLOCKS_PER_DAY;
         }
         if (unstake) {
+            if (getTokenActions(tokenId) <= 0) {
+                throw new Exception("claim_noActionsLeft");
+            }
+            removeActionPoint(tokenId);
             if (currentBlockIndex() - stake < minStakeBlockCount()) {
                 throw new Exception("villagerEarnings_minStakeDuration");
             }
@@ -207,10 +207,14 @@ public class CandyClashStaking {
         return earnings;
     }
 
-    private static int villainEarnings(ByteString tokenId, boolean unstake, int level, Hash160 owner) {
+    private static int villainEarnings(ByteString tokenId, boolean unstake, int level, Hash160 owner) throws Exception {
         int stake = villainStake(tokenId);
         int claimAmount = level * (candyPerLevel() - stake);
         if (unstake) {
+            if (getTokenActions(tokenId) <= 0) {
+                throw new Exception("claim_noActionsLeft");
+            }
+            removeActionPoint(tokenId);
             decTotalLevelsStaked(level);
             deleteVillainStake(tokenId);
             decTotalVillainsStaked(1);
@@ -265,7 +269,7 @@ public class CandyClashStaking {
                 return 0;
             }
             if (getTokenType(tokenIds[i]) == TYPE_VILLAIN) {
-                int sugarValue = Integer.valueOf(getTokenLevel(tokenIds[i]));
+                int sugarValue = getTokenLevel(tokenIds[i]);
                 int stake = villainStake(tokenIds[i]);
                 claimAmount += sugarValue * (candyPerLevel() - stake);
             } else {
@@ -273,7 +277,7 @@ public class CandyClashStaking {
                 if (totalCandiesEarned() < candyBalance()) {
                     // int claimBonus = stringToInt(properties.get(BONUS));
                     claimAmount += (currentBlockIndex() - stake) * dailyCandyRate() / BLOCKS_PER_DAY;
-                } else {
+                } else if (stake < lastClaimBlockIndex()) {
                     claimAmount += (lastClaimBlockIndex() - stake) * dailyCandyRate() / BLOCKS_PER_DAY;
                 }
             }
@@ -385,12 +389,12 @@ public class CandyClashStaking {
         Storage.put(ctx, totalVillagersStakedKey, totalVillagersStaked() - amount);
     }
 
-    private static void incrementTotalVillainCandiesStaked(int amount) {
+    private static void incTotalVillainsStaked(int amount) {
         Storage.put(ctx, totalVillainsStakedKey, totalVillainsStaked() + amount);
     }
 
     private static void decTotalVillainsStaked(int amount) {
-        Storage.put(ctx, totalVillainsStakedKey, totalVillagersStaked() - amount);
+        Storage.put(ctx, totalVillainsStakedKey, totalVillainsStaked() - amount);
     }
 
     private static void incrementTotalCandiesEarned(int amount) {
