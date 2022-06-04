@@ -28,7 +28,6 @@ import io.neow3j.devpack.events.Event2Args;
 import io.neow3j.devpack.events.Event3Args;
 import io.neow3j.devpack.events.Event4Args;
 
-import static io.neow3j.devpack.StringLiteralHelper.stringToInt;
 import static io.neocandy.games.candyclash.Utils.createStorageMapPrefix;
 import static io.neocandy.games.candyclash.Utils.randomNumber;
 import static io.neocandy.games.candyclash.Utils.generateName;
@@ -128,6 +127,8 @@ public class CandyClashNFT {
     private static final byte[] lostNftsKey = Helper.toByteArray((byte) 17);
     private static final byte[] actionPointPriceKey = Helper.toByteArray((byte) 18);
     private static final byte[] actionPointsPerLevelTableKey = Helper.toByteArray((byte) 19);
+    private static final byte[] villainsCountKey = Helper.toByteArray((byte) 20);
+    private static final byte[] villagersCountKey = Helper.toByteArray((byte) 21);
 
     // STORAGE MAPS
     private static final StorageMap tokens = new StorageMap(ctx, Helper.toByteArray((byte) 101));
@@ -139,7 +140,6 @@ public class CandyClashNFT {
     private static final StorageMap healthValues = new StorageMap(ctx, (byte) 107);
     private static final StorageMap actionPointValues = new StorageMap(ctx, (byte) 108);
     private static final StorageMap villains = new StorageMap(ctx, (byte) 109);
-    private static final StorageMap villagers = new StorageMap(ctx, (byte) 110);
     private static final StorageMap immutableTokenProperties = new StorageMap(ctx, (byte) 111);
 
     @OnNEP17Payment
@@ -338,48 +338,6 @@ public class CandyClashNFT {
         return StdLib.jsonSerialize(properties(tokenId));
     }
 
-    /**
-     * Query minted villager nfts, supports pagination.
-     * 
-     * @param from start index
-     * @param size list size
-     * @return list of minted villager nfts
-     */
-    @Safe
-    public static String getVillagerCandies(int from, int size) {
-        Iterator<Struct<ByteString, ByteString>> iterator = villagers.find(FindOptions.RemovePrefix);
-        List<Integer> result = new List<>();
-        int count = 0;
-        while (iterator.next() && result.size() != size) {
-            if (count >= from) {
-                result.add(iterator.get().key.toInt());
-            }
-            count++;
-        }
-        return StdLib.jsonSerialize(result);
-    }
-
-    /**
-     * Query minted villain nfts, supports pagination.
-     * 
-     * @param from start index
-     * @param size list size
-     * @return list of minted villain nfts
-     */
-    @Safe
-    public static String getVillainCandies(int from, int size) {
-        Iterator<Struct<ByteString, ByteString>> iterator = villains.find(FindOptions.RemovePrefix);
-        List<Integer> result = new List<>();
-        int count = 0;
-        while (iterator.next() && result.size() != size) {
-            if (count >= from) {
-                result.add(iterator.get().key.toInt());
-            }
-            count++;
-        }
-        return StdLib.jsonSerialize(result);
-    }
-
     @Safe
     public static int[] experienceTable() {
         return (int[]) StdLib.deserialize(Storage.get(ctx, xpTableKey));
@@ -427,6 +385,16 @@ public class CandyClashNFT {
             throw new Exception("tokenLevel_tokenDoesNotExist");
         }
         return actions.toInt();
+    }
+
+    @Safe
+    public static int mintedVillainsCount() {
+        return Storage.getIntOrZero(ctx, villainsCountKey);
+    }
+
+    @Safe
+    public static int mintedVillagersCount() {
+        return Storage.getIntOrZero(ctx, villagersCountKey);
     }
 
     /* READ & WRITE */
@@ -535,7 +503,6 @@ public class CandyClashNFT {
         Map<String, Object> properties = new Map<>();
         properties.put(TOKEN_ID, ts);
         properties.put(DESC, "This candy is part of the Candyclash NFT collection.");
-        properties.put(IMAGE, getImageBaseURI() + "/" + tokenId + ".png");
         properties.put(TOKEN_URI, "");
         properties.put(GENERATION, gen);
 
@@ -559,13 +526,14 @@ public class CandyClashNFT {
         String bonus = StdLib.jsonSerialize(randBonus);
         properties.put(BONUS, bonus);
         if (isEvil) {
+            properties.put(IMAGE, getImageBaseURI() + "/villains/" + mintedVillainsCount() + ".png");
             properties.put(ORIGIN, ORIGIN_CANEMOR);
             properties.put(TYPE, TYPE_VILLAIN);
             villains.put(tokenId, owner);
         } else {
+            properties.put(IMAGE, getImageBaseURI() + "/villagers/" + mintedVillagersCount() + ".png");
             properties.put(ORIGIN, ORIGIN_SWEETGLEN);
             properties.put(TYPE, TYPE_VILLAGER);
-            villagers.put(tokenId, owner);
         }
         incrementTotalSupplyByOne();
         saveProperties(properties, tokenId);
@@ -744,6 +712,16 @@ public class CandyClashNFT {
     private static void incrementTotalSupplyByOne() {
         int updatedTotalSupply = Storage.getInt(ctx, totalSupplyKey) + 1;
         Storage.put(ctx, totalSupplyKey, updatedTotalSupply);
+    }
+
+    private static void incrementVillagerCountByOne() {
+        int result = Storage.getIntOrZero(ctx, villagersCountKey) + 1;
+        Storage.put(ctx, villagersCountKey, result);
+    }
+
+    private static void incrementVillainCountByOne() {
+        int result = Storage.getIntOrZero(ctx, villainsCountKey) + 1;
+        Storage.put(ctx, villainsCountKey, result);
     }
 
     /* PERMISSION CHECKS */

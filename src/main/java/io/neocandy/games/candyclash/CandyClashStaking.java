@@ -71,17 +71,12 @@ public class CandyClashStaking {
     // METADATA VALUES
     private static final String TYPE_VILLAIN = "Villain";
 
-    //
-    private static final String SUGAR = "Sugar";
-    private static final String GENERATION = "Generation";
-    private static final String TYPE = "Type";
-    private static final String ATTRIBUTES = "attributes";
-    private static final String BONUS = "Claim Bonus";
-
     private static final StorageContext ctx = Storage.getStorageContext();
     private static final StorageMap villainStakes = new StorageMap(ctx, Helper.toByteArray((byte) 101));
     private static final StorageMap villagerStakes = new StorageMap(ctx, Helper.toByteArray((byte) 102));
     private static final StorageMap ownerOfMap = new StorageMap(ctx, Helper.toByteArray((byte) 103));
+    private static final StorageMap villagerEarnings = new StorageMap(ctx, Helper.toByteArray((byte) 105));
+    private static final StorageMap villainEarnings = new StorageMap(ctx, Helper.toByteArray((byte) 106));
 
     @OnNEP17Payment
     public static void onPayment(Hash160 from, int amount, Object data) throws Exception {
@@ -142,9 +137,14 @@ public class CandyClashStaking {
             }
             if (getTokenType(tokenIds[i]) == TYPE_VILLAIN) {
                 int level = getTokenLevel(tokenIds[i]);
-                totalEarnings += villainEarnings(tokenIds[i], unstake, level, owner);
+                int villainEarnings = villainEarnings(tokenIds[i], unstake, level, owner);
+                totalEarnings += villainEarnings;
+                increaseVillainEarnings(owner, villainEarnings);
+
             } else {
-                totalEarnings += villagerEarnings(tokenIds[i], unstake, owner);
+                int villagerEarnings = villagerEarnings(tokenIds[i], unstake, owner);
+                totalEarnings += villagerEarnings;
+                increaseVillagerEarnings(owner, villagerEarnings);
             }
         }
         assert owner != null;
@@ -353,6 +353,16 @@ public class CandyClashStaking {
     }
 
     @Safe
+    public static int villainEarnings(Hash160 owner) {
+        return villainEarnings.getIntOrZero(owner.toByteArray());
+    }
+
+    @Safe
+    public static int villagerEarnings(Hash160 owner) {
+        return villagerEarnings.getIntOrZero(owner.toByteArray());
+    }
+
+    @Safe
     public static Hash160 owner() {
         return new Hash160(Storage.get(ctx, ownerKey));
     }
@@ -431,6 +441,16 @@ public class CandyClashStaking {
 
     private static int lastClaimBlockIndex() {
         return Storage.getIntOrZero(ctx, lastClaimBlockIndexKey);
+    }
+
+    private static void increaseVillagerEarnings(Hash160 account, int amount) {
+        int result = villagerEarnings.getIntOrZero(account.toByteArray());
+        villagerEarnings.put(account.toByteArray(), result + amount);
+    }
+
+    private static void increaseVillainEarnings(Hash160 account, int amount) {
+        int result = villainEarnings.getIntOrZero(account.toByteArray());
+        villainEarnings.put(account.toByteArray(), result + amount);
     }
 
     private static void updateLastClaimBlockIndex(int value) {
