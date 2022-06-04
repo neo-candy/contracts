@@ -526,11 +526,13 @@ public class CandyClashNFT {
         String bonus = StdLib.jsonSerialize(randBonus);
         properties.put(BONUS, bonus);
         if (isEvil) {
+            incrementVillainCountByOne();
             properties.put(IMAGE, getImageBaseURI() + "/villains/" + mintedVillainsCount() + ".png");
             properties.put(ORIGIN, ORIGIN_CANEMOR);
             properties.put(TYPE, TYPE_VILLAIN);
             villains.put(tokenId, owner);
         } else {
+            incrementVillagerCountByOne();
             properties.put(IMAGE, getImageBaseURI() + "/villagers/" + mintedVillagersCount() + ".png");
             properties.put(ORIGIN, ORIGIN_SWEETGLEN);
             properties.put(TYPE, TYPE_VILLAGER);
