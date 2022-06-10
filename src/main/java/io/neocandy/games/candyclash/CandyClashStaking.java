@@ -70,7 +70,7 @@ public class CandyClashStaking {
     private static final byte[] totalVillainClaimsKey = Helper.toByteArray((byte) 19);
     private static final byte[] totalVillagerClaimsKey = Helper.toByteArray((byte) 20);
 
-    // METADATA VALUES
+    /* METADATA VALUES */
     private static final String TYPE_VILLAIN = "Villain";
 
     private static final StorageContext ctx = Storage.getStorageContext();

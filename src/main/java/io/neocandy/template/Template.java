@@ -9,10 +9,13 @@ import io.neow3j.devpack.StorageContext;
 import io.neow3j.devpack.annotations.DisplayName;
 import io.neow3j.devpack.annotations.OnDeployment;
 import io.neow3j.devpack.annotations.OnNEP17Payment;
+import io.neow3j.devpack.annotations.Permission;
 import io.neow3j.devpack.annotations.Safe;
+import io.neow3j.devpack.constants.NativeContract;
 import io.neow3j.devpack.contracts.ContractManagement;
 import io.neow3j.devpack.events.Event3Args;
 
+@Permission(nativeContract = NativeContract.ContractManagement)
 public class Template {
 
     @DisplayName("Payment")

@@ -30,7 +30,7 @@ test {
 }
 
 ext {
-   javaMainClass = "io.neocandy.deployment.candyclash.CUCandyClash"
+   javaMainClass = "io.neocandy.deployment.candefi.CUCandefi"
 }
 
 application {

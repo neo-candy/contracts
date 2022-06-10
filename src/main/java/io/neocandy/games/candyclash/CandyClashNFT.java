@@ -105,6 +105,10 @@ public class CandyClashNFT {
     private static final String ROYALTIES_ADDRESS = "address";
     private static final String ROYALTIES_VALUE = "value";
 
+    // PAYMENT ACTIONS
+    private static final String ACTION_ADD_XP = "addExperienceToToken";
+    private static final String ACTION_ADD_ACTION = "addActionPoints";
+
     private static final StorageContext ctx = Storage.getStorageContext();
 
     // STORAGE KEYS
@@ -176,7 +180,7 @@ public class CandyClashNFT {
             ByteString tokenId = (ByteString) d[0];
             Hash160 owner = ownerOf(tokenId);
             String action = (String) d[1];
-            if (action == "addExperienceToToken") {
+            if (action == ACTION_ADD_XP) {
                 if (owner != from) {
                     throw new Exception("addExperienceToToken_noAuth");
                 }
@@ -186,7 +190,7 @@ public class CandyClashNFT {
                 }
                 int xp = amount / pricePerXp;
                 addExperienceToToken(tokenId, xp);
-            } else if (action == "addActionPoints") {
+            } else if (action == ACTION_ADD_ACTION) {
                 int pricePerAction = pricePerActionPoint();
                 if (amount % pricePerAction != 0) {
                     throw new Exception("onPayment_addActionPoints_invalidAmont");

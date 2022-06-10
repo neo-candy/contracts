@@ -6,18 +6,22 @@ import io.neow3j.devpack.annotations.Struct;
 @Struct
 public class Position {
 
+    public Hash160 creator;
     public Hash160 token;
     public int fee;
     public int stake;
     public int expiration;
     public int strike;
+    public int direction;
 
-    public Position(Hash160 token, int fee, int stake, int expiration, int strike) {
+    public Position(Hash160 creator, Hash160 token, int fee, int stake, int expiration, int strike, int direction) {
+        this.creator = creator;
         this.token = token;
         this.fee = fee;
         this.stake = stake;
         this.expiration = expiration;
         this.strike = strike;
+        this.direction = direction;
     }
 
 }
