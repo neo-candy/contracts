@@ -16,7 +16,7 @@ import io.neow3j.devpack.contracts.ContractManagement;
 import io.neow3j.devpack.events.Event3Args;
 
 @Permission(nativeContract = NativeContract.ContractManagement)
-public class Template {
+public class ContractTemplate {
 
     @DisplayName("Payment")
     static Event3Args<Hash160, Integer, Object> onPayment;
