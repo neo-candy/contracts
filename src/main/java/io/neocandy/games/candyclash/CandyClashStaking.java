@@ -115,7 +115,7 @@ public class CandyClashStaking {
             stakeVillager(sender, tokenId);
         }
 
-        new StorageMap(ctx, Utils.createStorageMapPrefix(sender, tokensOfKey)).put(tokenId, 1);
+        new StorageMap(ctx, CandyClashUtils.createStorageMapPrefix(sender, tokensOfKey)).put(tokenId, 1);
         ownerOfMap.put(tokenId, sender);
     }
 
@@ -128,7 +128,7 @@ public class CandyClashStaking {
     public static List<String> tokensOf(Hash160 owner) throws Exception {
         Iterator<Struct<ByteString, ByteString>> iterator = (Iterator<Struct<ByteString, ByteString>>) Storage.find(
                 ctx.asReadOnly(),
-                Utils.createStorageMapPrefix(owner, tokensOfKey),
+                CandyClashUtils.createStorageMapPrefix(owner, tokensOfKey),
                 FindOptions.RemovePrefix);
 
         List<String> tokens = new List();
@@ -364,7 +364,7 @@ public class CandyClashStaking {
             deleteVillagerStake(tokenId);
             decTotalVillagersStaked(1);
             deleteOwnerOfToken(tokenId);
-            new StorageMap(ctx, Utils.createStorageMapPrefix(owner, tokensOfKey)).delete(tokenId);
+            new StorageMap(ctx, CandyClashUtils.createStorageMapPrefix(owner, tokensOfKey)).delete(tokenId);
             safeTransferNft(owner, tokenId);
         } else {
             int taxedAmount = earnings * taxAmount() / 100;
@@ -388,7 +388,7 @@ public class CandyClashStaking {
             deleteVillainStake(tokenId);
             decTotalVillainsStaked(1);
             deleteOwnerOfToken(tokenId);
-            new StorageMap(ctx, Utils.createStorageMapPrefix(owner, tokensOfKey)).delete(tokenId);
+            new StorageMap(ctx, CandyClashUtils.createStorageMapPrefix(owner, tokensOfKey)).delete(tokenId);
             safeTransferNft(owner, tokenId);
         } else {
             updateVillainStake(tokenId, candyPerLevel());

@@ -26,7 +26,7 @@ import io.neow3j.devpack.events.Event2Args;
 import io.neow3j.devpack.events.Event3Args;
 import io.neow3j.devpack.events.Event4Args;
 
-import static io.neocandy.games.candyclash.Utils.createStorageMapPrefix;
+import static io.neocandy.games.candyclash.CandyClashUtils.createStorageMapPrefix;
 
 @Permission(contract = "*", methods = { "onNEP11Payment", "transfer" })
 @Permission(nativeContract = NativeContract.ContractManagement)

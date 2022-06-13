@@ -28,9 +28,9 @@ import io.neow3j.devpack.events.Event2Args;
 import io.neow3j.devpack.events.Event3Args;
 import io.neow3j.devpack.events.Event4Args;
 
-import static io.neocandy.games.candyclash.Utils.createStorageMapPrefix;
-import static io.neocandy.games.candyclash.Utils.randomNumber;
-import static io.neocandy.games.candyclash.Utils.generateName;
+import static io.neocandy.games.candyclash.CandyClashUtils.createStorageMapPrefix;
+import static io.neocandy.games.candyclash.CandyClashUtils.randomNumber;
+import static io.neocandy.games.candyclash.CandyClashUtils.generateName;
 
 @ManifestExtra(key = "name", value = "CandyClashNFT Contract")
 @ManifestExtra(key = "author", value = "NeoCandy")

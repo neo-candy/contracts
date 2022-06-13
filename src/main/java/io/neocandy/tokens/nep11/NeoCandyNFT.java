@@ -27,7 +27,7 @@ import io.neow3j.devpack.events.Event2Args;
 import io.neow3j.devpack.events.Event3Args;
 import io.neow3j.devpack.events.Event4Args;
 
-import static io.neocandy.games.candyclash.Utils.createStorageMapPrefix;
+import static io.neocandy.games.candyclash.CandyClashUtils.createStorageMapPrefix;
 
 @ManifestExtra(key = "name", value = "NeoCandyNFT Contract")
 @ManifestExtra(key = "author", value = "NeoCandy")
