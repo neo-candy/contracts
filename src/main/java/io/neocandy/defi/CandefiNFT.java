@@ -29,6 +29,7 @@ import io.neow3j.devpack.events.Event2Args;
 import io.neow3j.devpack.events.Event3Args;
 import io.neow3j.devpack.events.Event4Args;
 import io.neow3j.devpack.events.Event5Args;
+import io.neow3j.devpack.events.Event6Args;
 
 @ManifestExtra(key = "name", value = "CandeFi Contract")
 @ManifestExtra(key = "author", value = "NeoCandy")
@@ -50,8 +51,8 @@ public class CandefiNFT {
     @DisplayName("Payment")
     private static Event3Args<Hash160, Integer, Object> onPayment;
 
-    @DisplayName("CallMinted")
-    private static Event5Args<Hash160, ByteString, Integer, Integer, Integer> onCallMinted;
+    @DisplayName("OptionMinted")
+    private static Event5Args<Hash160, ByteString, Integer, Integer, Integer> onOptionMinted;
 
     @DisplayName("Exercised")
     private static Event5Args<Hash160, ByteString, Integer, Integer, Integer> onExercise;
@@ -141,9 +142,11 @@ public class CandefiNFT {
         }
         int stake = amount - protocolFee();
         if (req.type == TYPE_CALL) {
-            mintCall(from, req.strike, stake);
+            ByteString tokenId = mint(from, req.strike, stake, TYPE_CALL);
+            onOptionMinted.fire(from, tokenId, req.strike, stake, TYPE_CALL);
         } else if (req.type == TYPE_PUT) {
-            mintPut(from, req.strike, stake);
+            ByteString tokenId = mint(from, req.strike, stake, TYPE_PUT);
+            onOptionMinted.fire(from, tokenId, req.strike, stake, TYPE_PUT);
         } else
             throw new Exception("onPayment_invalidType");
         onPayment.fire(from, amount, data);
@@ -392,18 +395,12 @@ public class CandefiNFT {
         return Helper.concat(prefix, owner.toByteArray());
     }
 
-    private static void mintCall(Hash160 writer, int strike, int stake) throws Exception {
-        // TODO: why does witness check fail here?
-        /*
-         * if (!Runtime.checkWitness(writer)) {
-         * throw new Exception("mintCall_noAuth");
-         * }
-         */
+    private static ByteString mint(Hash160 writer, int strike, int stake, int type) throws Exception {
         if (strike <= 0) {
-            throw new Exception("mintCall_invalidStrike");
+            throw new Exception("mint_invalidStrike");
         }
         if (stake <= 0) {
-            throw new Exception("mintCall_invalidStake");
+            throw new Exception("mint_invalidStake");
         }
         ByteString tokenId = nextTokenId();
         Map<String, Object> properties = new Map<>();
@@ -425,43 +422,7 @@ public class CandefiNFT {
         new StorageMap(ctx, createStorageMapPrefix(writer, writerOfKey)).put(tokenId, 1);
         incrementBalanceByOne(writer);
         onMint.fire(writer, tokenId);
-        onCallMinted.fire(writer, tokenId, strike, stake, TYPE_CALL);
-    }
-
-    private static void mintPut(Hash160 writer, int strike, int stake) throws Exception {
-        // TODO: why does witness check fail here?
-        /*
-         * if (!Runtime.checkWitness(writer)) {
-         * throw new Exception("mintCall_noAuth");
-         * }
-         */
-        if (strike <= 0) {
-            throw new Exception("mintPut_invalidStrike");
-        }
-        if (stake <= 0) {
-            throw new Exception("mintPut_invalidStake");
-        }
-        ByteString tokenId = nextTokenId();
-        Map<String, Object> properties = new Map<>();
-        properties.put(TOKEN_ID, tokenId);
-        properties.put(NAME, "Name Placeholder");
-        properties.put(DESC, "Description Placeholder");
-        properties.put(TOKEN_URI, "");
-        properties.put(IMAGE, getImageBaseURI());
-        properties.put(STAKE, stake);
-        properties.put(STRIKE, strike);
-        properties.put(TYPE, TYPE_PUT);
-        properties.put(WRITER, writer.toByteString());
-
-        incrementCurrentSupplyByOne();
-        saveProperties(properties, tokenId);
-        tokens.put(tokenId, 1);
-        ownerOfMap.put(tokenId, writer);
-        new StorageMap(ctx, createStorageMapPrefix(writer, tokensOfKey)).put(tokenId, 1);
-        new StorageMap(ctx, createStorageMapPrefix(writer, writerOfKey)).put(tokenId, 1);
-        incrementBalanceByOne(writer);
-        onMint.fire(writer, tokenId);
-        onCallMinted.fire(writer, tokenId, strike, stake, TYPE_PUT);
+        return tokenId;
     }
 
     private static void increaseClaims(Hash160 account, int amount) {
