@@ -25,11 +25,12 @@ import io.neow3j.devpack.contracts.ContractManagement;
 import io.neow3j.devpack.contracts.NeoToken;
 import io.neow3j.devpack.contracts.OracleContract;
 import io.neow3j.devpack.contracts.StdLib;
-import io.neow3j.devpack.events.Event2Args;
+import io.neow3j.devpack.events.Event1Arg;
 import io.neow3j.devpack.events.Event3Args;
 import io.neow3j.devpack.events.Event4Args;
 import io.neow3j.devpack.events.Event5Args;
 import io.neow3j.devpack.events.Event6Args;
+import io.neow3j.devpack.events.Event7Args;
 
 @ManifestExtra(key = "name", value = "CandeFi Contract")
 @ManifestExtra(key = "author", value = "NeoCandy")
@@ -42,9 +43,6 @@ public class CandefiNFT {
 
     // EVENTS
 
-    @DisplayName("Mint")
-    private static Event2Args<Hash160, ByteString> onMint;
-
     @DisplayName("Transfer")
     private static Event4Args<Hash160, Hash160, Integer, ByteString> onTransfer;
 
@@ -52,10 +50,16 @@ public class CandefiNFT {
     private static Event3Args<Hash160, Integer, Object> onPayment;
 
     @DisplayName("OptionMinted")
-    private static Event5Args<Hash160, ByteString, Integer, Integer, Integer> onOptionMinted;
+    private static Event7Args<Hash160, ByteString, Integer, Integer, Integer, Integer, Integer> onOptionMinted;
 
     @DisplayName("Exercised")
     private static Event5Args<Hash160, ByteString, Integer, Integer, Integer> onExercise;
+
+    @DisplayName("Burn")
+    private static Event3Args<Hash160, ByteString, Integer> onBurn;
+
+    @DisplayName("Debug")
+    private static Event1Arg<Object> onDebug;
 
     // DEFAULT METADATA
     private static final String NAME = "name";
@@ -70,6 +74,12 @@ public class CandefiNFT {
     private static final String TYPE = "Type";
     private static final String WRITER = "Writer";
     private static final String OWNER = "Owner";
+    private static final String VDOT = "Vdot";
+    private static final String CREATED = "Created";
+    private static final String EXERCISED = "Exercised";
+    private static final String REAL_VALUE = "Real Value";
+    private static final String START_VALUE = "Start Value";
+    private static final String VI = "Vi";
 
     // CUSTOM METADATA VALUES
     private static final int TYPE_CALL = 1;
@@ -92,6 +102,7 @@ public class CandefiNFT {
     private static final String ROYALTIES_VALUE = "value";
 
     private static final StorageContext ctx = Storage.getStorageContext();
+    private static int ORACLE_SUCCESS_RESPONSE_CODE = 0;
 
     // STORAGE KEYS
     private static final byte[] ownerkey = Helper.toByteArray((byte) 1);
@@ -100,8 +111,6 @@ public class CandefiNFT {
     private static final byte[] imageBaseUriKey = Helper.toByteArray((byte) 4);
     private static final byte[] currentSupplyKey = Helper.toByteArray((byte) 5);
     private static final byte[] isPausedKey = Helper.toByteArray((byte) 6);
-    private static final byte[] royaltiesReceiverKey = Helper.toByteArray((byte) 7);
-    private static final byte[] royaltiesAmountKey = Helper.toByteArray((byte) 8);
     private static final byte[] oracleEndpointKey = Helper.toByteArray((byte) 9);
     private static final byte[] writerOfKey = Helper.toByteArray((byte) 10);
     private static final byte[] minStakeKey = Helper.toByteArray((byte) 11);
@@ -112,12 +121,18 @@ public class CandefiNFT {
     private static final StorageMap balances = new StorageMap(ctx, Helper.toByteArray((byte) 102));
     private static final StorageMap ownerOfMap = new StorageMap(ctx, Helper.toByteArray((byte) 103));
     private static final StorageMap immutableTokenProperties = new StorageMap(ctx, (byte) 104);
-    private static final StorageMap claims = new StorageMap(ctx, (byte) 105);
+    private static final StorageMap earnings = new StorageMap(ctx, (byte) 105);
+    private static final StorageMap writerOfMap = new StorageMap(ctx, (byte) 106);
+    private static final StorageMap exercised = new StorageMap(ctx, (byte) 107);
+    private static final StorageMap stakes = new StorageMap(ctx, (byte) 109);
 
     @io.neow3j.devpack.annotations.Struct
     static class Request {
         public int type;
         public int strike;
+        public int vdot; // value decline over time in ms
+        public int value;
+        public int vi;
     }
 
     @OnNEP17Payment
@@ -141,14 +156,7 @@ public class CandefiNFT {
             throw new Exception("onPayment_invalidMinStake");
         }
         int stake = amount - protocolFee();
-        if (req.type == TYPE_CALL) {
-            ByteString tokenId = mint(from, req.strike, stake, TYPE_CALL);
-            onOptionMinted.fire(from, tokenId, req.strike, stake, TYPE_CALL);
-        } else if (req.type == TYPE_PUT) {
-            ByteString tokenId = mint(from, req.strike, stake, TYPE_PUT);
-            onOptionMinted.fire(from, tokenId, req.strike, stake, TYPE_PUT);
-        } else
-            throw new Exception("onPayment_invalidType");
+        mint(from, req, stake);
         onPayment.fire(from, amount, data);
     }
 
@@ -157,22 +165,6 @@ public class CandefiNFT {
     @Safe
     public static Hash160 contractOwner() {
         return new Hash160(Storage.get(ctx, ownerkey));
-    }
-
-    /**
-     * Required by NFT marketplaces that support royalties.
-     * 
-     * @return royalties data with receiverAddress and royaltiesAmount.
-     */
-    @Safe
-    public static String getRoyalties() {
-        String receiverAddress = Storage.getString(ctx, royaltiesReceiverKey);
-        int amount = Storage.getInt(ctx, royaltiesAmountKey);
-        Map<String, Object> map = new Map<>();
-        map.put(ROYALTIES_ADDRESS, receiverAddress);
-        map.put(ROYALTIES_VALUE, StdLib.jsonSerialize(amount));
-        Object[] arr = new Object[] { map };
-        return StdLib.jsonSerialize(arr);
     }
 
     @Safe
@@ -201,11 +193,9 @@ public class CandefiNFT {
     }
 
     @Safe
-    public static Iterator<Struct<ByteString, ByteString>> tokensOf(Hash160 owner) {
-        return (Iterator<Struct<ByteString, ByteString>>) Storage.find(
-                ctx.asReadOnly(),
-                createStorageMapPrefix(owner, tokensOfKey),
-                FindOptions.RemovePrefix);
+    public static Iterator<ByteString> tokensOf(Hash160 owner) {
+        return (Iterator<ByteString>) Storage.find(ctx.asReadOnly(), createStorageMapPrefix(owner, tokensOfKey),
+                (byte) (FindOptions.KeysOnly | FindOptions.RemovePrefix));
     }
 
     @Safe
@@ -223,7 +213,7 @@ public class CandefiNFT {
     }
 
     @Safe
-    public static List<String> writerOfJson(Hash160 owner) throws Exception {
+    public static List<String> tokensOfWriterJson(Hash160 owner) throws Exception {
         Iterator<Struct<ByteString, ByteString>> iterator = (Iterator<Struct<ByteString, ByteString>>) Storage.find(
                 ctx.asReadOnly(),
                 createStorageMapPrefix(owner, writerOfKey),
@@ -239,6 +229,15 @@ public class CandefiNFT {
     @Safe
     public static Hash160 ownerOf(ByteString tokenId) {
         ByteString owner = ownerOfMap.get(tokenId);
+        if (owner == null) {
+            return null;
+        }
+        return new Hash160(owner);
+    }
+
+    @Safe
+    public static Hash160 writerOf(ByteString tokenId) {
+        ByteString owner = writerOfMap.get(tokenId);
         if (owner == null) {
             return null;
         }
@@ -272,9 +271,17 @@ public class CandefiNFT {
 
         List<Map<String, Object>> attributes = new List<>();
         attributes.add(getAttributeMap(TYPE, tokenProps.type));
-        attributes.add(getAttributeMap(STAKE, tokenProps.stake));
+        attributes.add(getAttributeMap(STAKE, stakeOf(tokenId)));
         attributes.add(getAttributeMap(STRIKE, tokenProps.strike));
         attributes.add(getAttributeMap(WRITER, tokenProps.writer));
+        attributes.add(getAttributeMap(OWNER, ownerOf(tokenProps.tokenId)));
+        attributes.add(getAttributeMap(VDOT, tokenProps.vdot));
+        attributes.add(getAttributeMap(CREATED, tokenProps.created));
+        attributes.add(getAttributeMap(EXERCISED, exercised(tokenId)));
+        attributes.add(getAttributeMap(REAL_VALUE,
+                determineValue(stakeOf(tokenId), tokenProps, 0)));
+        attributes.add(getAttributeMap(START_VALUE, tokenProps.value));
+        attributes.add(getAttributeMap(VI, tokenProps.vi));
 
         p.put(ATTRIBUTES, attributes);
 
@@ -303,11 +310,17 @@ public class CandefiNFT {
 
         List<Map<String, Object>> attributes = new List<>();
         attributes.add(getAttributeMap(TYPE, tokenProps.type));
-        attributes.add(getAttributeMap(STAKE, tokenProps.stake));
+        attributes.add(getAttributeMap(STAKE, stakeOf(tokenId)));
         attributes.add(getAttributeMap(STRIKE, tokenProps.strike));
         attributes.add(getAttributeMap(WRITER, StdLib.base64Encode(tokenProps.writer)));
         attributes.add(getAttributeMap(OWNER, StdLib.base64Encode(ownerOf(tokenProps.tokenId).toByteString())));
-
+        attributes.add(getAttributeMap(VDOT, tokenProps.vdot));
+        attributes.add(getAttributeMap(CREATED, tokenProps.created));
+        attributes.add(getAttributeMap(EXERCISED, exercised(tokenId)));
+        attributes.add(getAttributeMap(REAL_VALUE,
+                determineValue(stakeOf(tokenId), tokenProps, 0)));
+        attributes.add(getAttributeMap(START_VALUE, tokenProps.value));
+        attributes.add(getAttributeMap(VI, tokenProps.vi));
         p.put(ATTRIBUTES, attributes);
 
         return StdLib.jsonSerialize(p);
@@ -319,13 +332,13 @@ public class CandefiNFT {
     }
 
     @Safe
-    public static int claimsOf(Hash160 account) {
-        return claims.getIntOrZero(account.toByteArray());
+    public static int earningsOf(Hash160 account) {
+        return earnings.getIntOrZero(account.toByteArray());
     }
 
     @Safe
-    public static Iterator claims() {
-        return claims.find(FindOptions.RemovePrefix);
+    public static Iterator earnings() {
+        return earnings.find(FindOptions.RemovePrefix);
     }
 
     @Safe
@@ -338,7 +351,45 @@ public class CandefiNFT {
         return Storage.getInt(ctx, protocolFeeKey);
     }
 
+    @Safe
+    public static boolean exercised(ByteString tokenId) {
+        Boolean result = exercised.getBoolean(tokenId);
+        return result != null ? result : false;
+    }
+
+    @Safe
+    public static int stakeOf(ByteString tokenId) {
+        return stakes.getInt(tokenId);
+    }
+
     /* READ & WRITE */
+
+    public static void burn(ByteString tokenId) throws Exception {
+        assert (Runtime.getInvocationCounter() == 1);
+        Hash160 owner = ownerOf(tokenId);
+        Hash160 writer = writerOf(tokenId);
+
+        if (owner != writer) {
+            throw new Exception("burn_ownerNotWriter");
+        }
+
+        if (!Runtime.checkWitness(owner)) {
+            throw new Exception("burn_noAuth");
+        }
+        ownerOfMap.delete(tokenId);
+        writerOfMap.delete(tokenId);
+        new StorageMap(ctx, createStorageMapPrefix(owner, tokensOfKey)).delete(tokenId);
+        new StorageMap(ctx, createStorageMapPrefix(owner, writerOfKey)).delete(tokenId);
+        immutableTokenProperties.delete(tokenId);
+        tokens.delete(tokenId);
+        int transferAmount = stakeOf(tokenId);
+        safeTransfer(Runtime.getExecutingScriptHash(), candyContract(), writer,
+                transferAmount);
+        exercised.delete(tokenId);
+        stakes.delete(tokenId);
+        onBurn.fire(writer, tokenId, transferAmount);
+
+    }
 
     public static boolean transfer(Hash160 to, ByteString tokenId, Object data) throws Exception {
         Hash160 owner = ownerOf(tokenId);
@@ -363,45 +414,88 @@ public class CandefiNFT {
 
     public static void exercise(ByteString tokenId) throws Exception {
         Hash160 owner = new Hash160(ownerOfMap.get(tokenId));
+        Hash160 writer = new Hash160(writerOfMap.get(tokenId));
+        if (writer == owner) {
+            throw new Exception("exercise_writerCantExercise");
+        }
         if (!Runtime.checkWitness(owner)) {
             throw new Exception("exercise_noAuth");
         }
-        oracle("exerciseCall", tokenId);
+        oracle("oracleExercise", tokenId);
     }
 
-    public static void exerciseCall(String url, Object userData, int responseCode, ByteString response)
+    public static void oracleExercise(String url, Object userData, int responseCode, ByteString response)
             throws Exception {
+        assert (Runtime.getInvocationCounter() == 1);
+        if (responseCode != ORACLE_SUCCESS_RESPONSE_CODE) {
+            throw new Exception("oracleExercise_noSuccessResponse");
+        }
         if (Runtime.getCallingScriptHash() != OracleContract.getHash()) {
             throw new Exception("exerciseCall_onlyOracle");
         }
         ByteString tokenId = (ByteString) userData;
+        if (exercised(tokenId)) {
+            throw new Exception("oracleExercise_alreadyExercised");
+        }
         TokenProperties properties = (TokenProperties) StdLib.deserialize(immutableTokenProperties.get(tokenId));
-
+        if (properties == null) {
+            throw new Exception("oracleExercise_tokenDoesNotExist");
+        }
         Map<String, Object> result = (Map<String, Object>) StdLib
                 .jsonDeserialize(response.toString());
 
         int oraclePrice = decimalStringToInt((String) result.get("price"));
+        int stake = stakeOf(tokenId);
         Hash160 owner = new Hash160(ownerOfMap.get(tokenId));
-        if (canExercise(oraclePrice, properties.strike, properties.type)) {
-            safeTransfer(Runtime.getExecutingScriptHash(), NeoToken.getHash(), owner, properties.stake);
-            increaseClaims(owner, properties.stake);
-            onExercise.fire(owner, tokenId, properties.type, properties.stake, properties.strike);
+
+        int transferAmount = determineValue(stake, properties, oraclePrice);
+        if (transferAmount <= 0) {
+            throw new Exception("oracleExercise_zeroValue");
         }
+        if (stake - transferAmount < 0) {
+            throw new Exception("oracleExercise_stakeValueMismatch");
+        }
+        exercised.put(tokenId, 1);
+        stakes.put(tokenId, stake - transferAmount);
+        safeTransfer(Runtime.getExecutingScriptHash(), NeoToken.getHash(), owner, transferAmount);
+        increaseClaims(owner, transferAmount);
+        onExercise.fire(owner, tokenId, properties.type, transferAmount, properties.strike);
+
     }
 
     /* UTIL */
+
+    private static int determineValue(int stake, TokenProperties props, int oraclePrice) {
+        int timeDelta = Runtime.getTime() - props.created;
+        int priceDelta = oraclePrice != 0 ? oraclePrice - props.strike : 0;
+        int result = props.value - (props.vdot * timeDelta) + (priceDelta * props.vi);
+        return result < 0 ? 0 : (result > stake) ? stake : result;
+    }
 
     private static byte[] createStorageMapPrefix(Hash160 owner, byte[] prefix) {
         return Helper.concat(prefix, owner.toByteArray());
     }
 
-    private static ByteString mint(Hash160 writer, int strike, int stake, int type) throws Exception {
-        if (strike <= 0) {
+    private static void mint(Hash160 writer, Request data, int stake) throws Exception {
+        if (data.strike <= 0) {
             throw new Exception("mint_invalidStrike");
         }
         if (stake <= 0) {
             throw new Exception("mint_invalidStake");
         }
+        if (data.vdot < 0) {
+            throw new Exception("mint_invalidVdot");
+        }
+        if (data.type != TYPE_CALL && data.type != TYPE_PUT) {
+            throw new Exception("mint_invalidType");
+        }
+        if (data.value < 0 || data.value > stake) {
+            throw new Exception("mint_invalidValue");
+        }
+        if (data.vi < 0) {
+            throw new Exception("mint_invalidVi");
+        }
+
         ByteString tokenId = nextTokenId();
         Map<String, Object> properties = new Map<>();
         properties.put(TOKEN_ID, tokenId);
@@ -410,28 +504,28 @@ public class CandefiNFT {
         properties.put(TOKEN_URI, "");
         properties.put(IMAGE, getImageBaseURI());
         properties.put(STAKE, stake);
-        properties.put(STRIKE, strike);
-        properties.put(TYPE, TYPE_CALL);
+        properties.put(REAL_VALUE, data.value);
+        properties.put(STRIKE, data.strike);
+        properties.put(TYPE, data.type);
         properties.put(WRITER, writer.toByteString());
+        properties.put(VDOT, data.vdot);
+        properties.put(CREATED, Runtime.getTime());
+        properties.put(VI, data.vi);
 
         incrementCurrentSupplyByOne();
         saveProperties(properties, tokenId);
         tokens.put(tokenId, 1);
         ownerOfMap.put(tokenId, writer);
+        writerOfMap.put(tokenId, writer);
         new StorageMap(ctx, createStorageMapPrefix(writer, tokensOfKey)).put(tokenId, 1);
         new StorageMap(ctx, createStorageMapPrefix(writer, writerOfKey)).put(tokenId, 1);
         incrementBalanceByOne(writer);
-        onMint.fire(writer, tokenId);
-        return tokenId;
+        onOptionMinted.fire(writer, tokenId, data.strike, stake, data.vdot, data.type, data.vi);
     }
 
     private static void increaseClaims(Hash160 account, int amount) {
-        int claim = claimsOf(account);
-        claims.put(account.toByteArray(), amount + claim);
-    }
-
-    private static boolean canExercise(int oraclePrice, int strike, int type) {
-        return type == TYPE_CALL && oraclePrice > strike || type == TYPE_PUT && oraclePrice < strike;
+        int earned = earningsOf(account);
+        earnings.put(account.toByteArray(), amount + earned);
     }
 
     private static void safeTransfer(Hash160 from, Hash160 token, Hash160 to, int amount) throws Exception {
@@ -448,8 +542,9 @@ public class CandefiNFT {
     }
 
     private static void oracle(String callback, Object userData) {
+        // TODO: refactor
         String endpoint = Storage.getString(ctx, oracleEndpointKey) + "NEOUSDT";
-        OracleContract.request(endpoint, null, callback, userData, 30000000);
+        OracleContract.request(endpoint, null, callback, userData, 10000000);
     }
 
     private static ByteString nextTokenId() {
@@ -497,6 +592,19 @@ public class CandefiNFT {
             throw new Exception("saveProperties_missingWriter");
         }
 
+        if (!properties.containsKey(VDOT)) {
+            throw new Exception("saveProperties_missingVdot");
+        }
+        if (!properties.containsKey(CREATED)) {
+            throw new Exception("saveProperties_missingCreated");
+        }
+        if (!properties.containsKey(REAL_VALUE)) {
+            throw new Exception("saveProperties_missingValue");
+        }
+        if (!properties.containsKey(VI)) {
+            throw new Exception("saveProperties_missingVi");
+        }
+
         String name = (String) properties.get(NAME);
         String desc = (String) properties.get(DESC);
         String img = (String) properties.get(IMAGE);
@@ -504,10 +612,16 @@ public class CandefiNFT {
         int strike = (int) properties.get(STRIKE);
         int stake = (int) properties.get(STAKE);
         int type = (int) properties.get(TYPE);
+        int vdot = (int) properties.get(VDOT);
+        int created = (int) properties.get(CREATED);
         ByteString writer = (ByteString) properties.get(WRITER);
+        int value = (int) properties.get(REAL_VALUE);
+        int vi = (int) properties.get(VI);
 
-        TokenProperties tokenProps = new TokenProperties(tokenId, name, img, desc, uri, strike, stake, type, writer);
+        TokenProperties tokenProps = new TokenProperties(tokenId, name, img, desc, uri, strike, type, writer,
+                vdot, created, value, vi);
         immutableTokenProperties.put(tokenId, StdLib.serialize(tokenProps));
+        stakes.put(tokenId, stake);
     }
 
     private static Map<String, Object> getAttributeMap(String trait, Object value) {
@@ -575,7 +689,7 @@ public class CandefiNFT {
         if (fee < 0) {
             throw new Exception("updateProtocolFee_invalidAmount");
         }
-        Storage.put(ctx, minStakeKey, fee);
+        Storage.put(ctx, protocolFeeKey, fee);
     }
 
     /* CONTRACT MANAGEMENT */
@@ -604,20 +718,6 @@ public class CandefiNFT {
             Storage.put(ctx, imageBaseUriKey, imageBaseURI);
 
             Storage.put(ctx, isPausedKey, (int) arr[3]);
-
-            /*
-             * String royaltiesReceiverAddress = (String) arr[3];
-             * if (royaltiesReceiverAddress.length() == 0) {
-             * throw new Exception("deploy_royaltiesReceiverAddress ");
-             * }
-             * Storage.put(ctx, royaltiesReceiverKey, royaltiesReceiverAddress);
-             * 
-             * int royaltiesAmount = (int) arr[4];
-             * if (royaltiesAmount <= 0) {
-             * throw new Exception("deploy_royaltiesAmount");
-             * }
-             * Storage.put(ctx, royaltiesAmountKey, royaltiesAmount);
-             */
 
             String oracleEndpoint = (String) arr[4];
             if (oracleEndpoint.length() == 0) {
@@ -655,22 +755,28 @@ public class CandefiNFT {
         public String image;
         public String description;
         public String tokenUri;
-        public int stake;
         public int strike;
         public int type;
         public ByteString writer;
+        int vdot;
+        public int created;
+        int value;
+        int vi;
 
         public TokenProperties(ByteString tokenId, String name, String image, String description, String tokenUri,
-                int stake, int strike, int type, ByteString writer) {
+                int strike, int type, ByteString writer, int vdot, int created, int value, int vi) {
             this.tokenId = tokenId;
             this.name = name;
             this.image = image;
             this.description = description;
             this.tokenUri = tokenUri;
-            this.stake = stake;
             this.strike = strike;
             this.type = type;
             this.writer = writer;
+            this.vdot = vdot;
+            this.created = created;
+            this.value = value;
+            this.vi = vi;
         }
     }
 
