@@ -29,7 +29,6 @@ import io.neow3j.devpack.events.Event1Arg;
 import io.neow3j.devpack.events.Event3Args;
 import io.neow3j.devpack.events.Event4Args;
 import io.neow3j.devpack.events.Event5Args;
-import io.neow3j.devpack.events.Event6Args;
 import io.neow3j.devpack.events.Event7Args;
 
 @ManifestExtra(key = "name", value = "CandeFi Contract")
@@ -80,6 +79,7 @@ public class CandefiNFT {
     private static final String REAL_VALUE = "Real Value";
     private static final String START_VALUE = "Start Value";
     private static final String VI = "Vi";
+    private static final String SAFE = "Safe";
 
     // CUSTOM METADATA VALUES
     private static final int TYPE_CALL = 1;
@@ -96,10 +96,6 @@ public class CandefiNFT {
     private static final String ATTRIBUTE_TRAIT_TYPE = "trait_type";
     private static final String ATTRIBUTE_VALUE = "value";
     private static final String ATTRIBUTE_DISPLAY_TYPE = "display_type";
-
-    // ROYALTIES
-    private static final String ROYALTIES_ADDRESS = "address";
-    private static final String ROYALTIES_VALUE = "value";
 
     private static final StorageContext ctx = Storage.getStorageContext();
     private static int ORACLE_SUCCESS_RESPONSE_CODE = 0;
@@ -133,6 +129,7 @@ public class CandefiNFT {
         public int vdot; // value decline over time in ms
         public int value;
         public int vi;
+        public boolean safe;
     }
 
     @OnNEP17Payment
@@ -282,6 +279,7 @@ public class CandefiNFT {
                 determineValue(stakeOf(tokenId), tokenProps, 0)));
         attributes.add(getAttributeMap(START_VALUE, tokenProps.value));
         attributes.add(getAttributeMap(VI, tokenProps.vi));
+        attributes.add(getAttributeMap(SAFE, tokenProps.safe));
 
         p.put(ATTRIBUTES, attributes);
 
@@ -321,6 +319,8 @@ public class CandefiNFT {
                 determineValue(stakeOf(tokenId), tokenProps, 0)));
         attributes.add(getAttributeMap(START_VALUE, tokenProps.value));
         attributes.add(getAttributeMap(VI, tokenProps.vi));
+        attributes.add(getAttributeMap(SAFE, tokenProps.safe));
+
         p.put(ATTRIBUTES, attributes);
 
         return StdLib.jsonSerialize(p);
@@ -445,6 +445,9 @@ public class CandefiNFT {
                 .jsonDeserialize(response.toString());
 
         int oraclePrice = decimalStringToInt((String) result.get("price"));
+        if (!canExercise(oraclePrice, properties.strike, properties.type, properties.safe)) {
+            throw new Exception("oracleExercise_cantExercise");
+        }
         int stake = stakeOf(tokenId);
         Hash160 owner = new Hash160(ownerOfMap.get(tokenId));
 
@@ -464,6 +467,10 @@ public class CandefiNFT {
     }
 
     /* UTIL */
+
+    private static boolean canExercise(int oraclePrice, int strike, int type, boolean safe) {
+        return !safe || type == TYPE_CALL && oraclePrice > strike || type == TYPE_PUT && oraclePrice < strike;
+    }
 
     private static int determineValue(int stake, TokenProperties props, int oraclePrice) {
         int timeDelta = Runtime.getTime() - props.created;
@@ -511,6 +518,7 @@ public class CandefiNFT {
         properties.put(VDOT, data.vdot);
         properties.put(CREATED, Runtime.getTime());
         properties.put(VI, data.vi);
+        properties.put(SAFE, data.safe);
 
         incrementCurrentSupplyByOne();
         saveProperties(properties, tokenId);
@@ -563,35 +571,27 @@ public class CandefiNFT {
         if (!properties.containsKey(NAME)) {
             throw new Exception("saveProperties_missingName");
         }
-
         if (!properties.containsKey(DESC)) {
             throw new Exception("saveProperties_missingDescription");
         }
-
         if (!properties.containsKey(IMAGE)) {
             throw new Exception("saveProperties_missingImage");
         }
-
         if (!properties.containsKey(TOKEN_URI)) {
             throw new Exception("saveProperties_missingTokenUri");
         }
-
         if (!properties.containsKey(STRIKE)) {
             throw new Exception("saveProperties_missingStrike");
         }
-
         if (!properties.containsKey(STAKE)) {
             throw new Exception("saveProperties_missingStake");
         }
-
         if (!properties.containsKey(TYPE)) {
             throw new Exception("saveProperties_missingType");
         }
-
         if (!properties.containsKey(WRITER)) {
             throw new Exception("saveProperties_missingWriter");
         }
-
         if (!properties.containsKey(VDOT)) {
             throw new Exception("saveProperties_missingVdot");
         }
@@ -603,6 +603,9 @@ public class CandefiNFT {
         }
         if (!properties.containsKey(VI)) {
             throw new Exception("saveProperties_missingVi");
+        }
+        if (!properties.containsKey(SAFE)) {
+            throw new Exception("saveProperties_missingSafe");
         }
 
         String name = (String) properties.get(NAME);
@@ -617,9 +620,10 @@ public class CandefiNFT {
         ByteString writer = (ByteString) properties.get(WRITER);
         int value = (int) properties.get(REAL_VALUE);
         int vi = (int) properties.get(VI);
+        boolean safe = (boolean) properties.get(SAFE);
 
         TokenProperties tokenProps = new TokenProperties(tokenId, name, img, desc, uri, strike, type, writer,
-                vdot, created, value, vi);
+                vdot, created, value, vi, safe);
         immutableTokenProperties.put(tokenId, StdLib.serialize(tokenProps));
         stakes.put(tokenId, stake);
     }
@@ -758,13 +762,16 @@ public class CandefiNFT {
         public int strike;
         public int type;
         public ByteString writer;
-        int vdot;
+        public int vdot;
         public int created;
-        int value;
-        int vi;
+        public int value;
+        public int vi;
+        public boolean safe;
+
+        // add getters
 
         public TokenProperties(ByteString tokenId, String name, String image, String description, String tokenUri,
-                int strike, int type, ByteString writer, int vdot, int created, int value, int vi) {
+                int strike, int type, ByteString writer, int vdot, int created, int value, int vi, boolean safe) {
             this.tokenId = tokenId;
             this.name = name;
             this.image = image;
@@ -777,6 +784,7 @@ public class CandefiNFT {
             this.created = created;
             this.value = value;
             this.vi = vi;
+            this.safe = safe;
         }
     }
 
