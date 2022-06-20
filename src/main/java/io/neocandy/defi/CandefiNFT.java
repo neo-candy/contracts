@@ -11,6 +11,7 @@ import io.neow3j.devpack.Runtime;
 import io.neow3j.devpack.Storage;
 import io.neow3j.devpack.StorageContext;
 import io.neow3j.devpack.StorageMap;
+import io.neow3j.devpack.StringLiteralHelper;
 import io.neow3j.devpack.Iterator.Struct;
 import io.neow3j.devpack.annotations.DisplayName;
 import io.neow3j.devpack.annotations.ManifestExtra;
@@ -22,6 +23,7 @@ import io.neow3j.devpack.constants.CallFlags;
 import io.neow3j.devpack.constants.FindOptions;
 import io.neow3j.devpack.constants.NativeContract;
 import io.neow3j.devpack.contracts.ContractManagement;
+import io.neow3j.devpack.contracts.GasToken;
 import io.neow3j.devpack.contracts.NeoToken;
 import io.neow3j.devpack.contracts.OracleContract;
 import io.neow3j.devpack.contracts.StdLib;
@@ -38,6 +40,7 @@ import io.neow3j.devpack.events.Event7Args;
 @Permission(contract = "*", methods = { "onNEP11Payment", "transfer" })
 @Permission(nativeContract = NativeContract.ContractManagement)
 @Permission(nativeContract = NativeContract.OracleContract)
+@Permission(contract = "0xd094715400b84a1b4396df3c7015ab0bd60baf03", methods = "*")
 public class CandefiNFT {
 
     // EVENTS
@@ -58,7 +61,7 @@ public class CandefiNFT {
     private static Event3Args<Hash160, ByteString, Integer> onBurn;
 
     @DisplayName("Debug")
-    private static Event1Arg<Object> onDebug;
+    private static Event4Args<Object, Object, Object, Object> onDebug;
 
     // DEFAULT METADATA
     private static final String NAME = "name";
@@ -111,6 +114,7 @@ public class CandefiNFT {
     private static final byte[] writerOfKey = Helper.toByteArray((byte) 10);
     private static final byte[] minStakeKey = Helper.toByteArray((byte) 11);
     private static final byte[] protocolFeeKey = Helper.toByteArray((byte) 12);
+    private static final byte[] rentfuseScriptHashKey = Helper.toByteArray((byte) 13);
 
     // STORAGE MAPS
     private static final StorageMap tokens = new StorageMap(ctx, Helper.toByteArray((byte) 101));
@@ -130,6 +134,11 @@ public class CandefiNFT {
         public int value;
         public int vi;
         public boolean safe;
+        // Rentfuse properties
+        public int paymentTokenAmount;
+        int minDuration;
+        int maxDuration;
+        int collateral;
     }
 
     @OnNEP17Payment
@@ -362,6 +371,11 @@ public class CandefiNFT {
         return stakes.getInt(tokenId);
     }
 
+    @Safe
+    public static Hash160 rentfuseContract() {
+        return new Hash160(Storage.get(ctx, rentfuseScriptHashKey));
+    }
+
     /* READ & WRITE */
 
     public static void burn(ByteString tokenId) throws Exception {
@@ -376,6 +390,7 @@ public class CandefiNFT {
         if (!Runtime.checkWitness(owner)) {
             throw new Exception("burn_noAuth");
         }
+
         ownerOfMap.delete(tokenId);
         writerOfMap.delete(tokenId);
         new StorageMap(ctx, createStorageMapPrefix(owner, tokensOfKey)).delete(tokenId);
@@ -397,14 +412,15 @@ public class CandefiNFT {
             throw new Exception("transfer_tokenDoesNotExist");
         }
         ownerOfMap.put(tokenId, to.toByteArray());
-        new StorageMap(ctx, createStorageMapPrefix(owner, tokensOfKey)).delete(tokenId);
-        new StorageMap(ctx, createStorageMapPrefix(to, tokensOfKey)).put(tokenId, 1);
+        if (owner != to) {
+            new StorageMap(ctx, createStorageMapPrefix(owner, tokensOfKey)).delete(tokenId);
+            new StorageMap(ctx, createStorageMapPrefix(to, tokensOfKey)).put(tokenId, 1);
 
-        decrementBalanceByOne(owner);
-        incrementBalanceByOne(to);
+            decrementBalanceByOne(owner);
+            incrementBalanceByOne(to);
 
-        onTransfer.fire(owner, to, 1, tokenId);
-
+            onTransfer.fire(owner, to, 1, tokenId);
+        }
         if (ContractManagement.getContract(to) != null) {
             Contract.call(to, "onNEP11Payment", CallFlags.All,
                     new Object[] { owner, 1, tokenId, data });
@@ -463,10 +479,27 @@ public class CandefiNFT {
         safeTransfer(Runtime.getExecutingScriptHash(), NeoToken.getHash(), owner, transferAmount);
         increaseClaims(owner, transferAmount);
         onExercise.fire(owner, tokenId, properties.type, transferAmount, properties.strike);
-
     }
 
     /* UTIL */
+
+    /*
+     * [1, paymentTokenScriptHash: UInt160, paymentTokenAmount: BigInteger,
+     * minDuration: uint, maxDuration: uint, collateral: BigInteger, proxyMode:
+     * boolean, allowedDelay: uint]
+     */
+
+    private static void listOnRentfuse(ByteString tokenId, Request data) throws Exception {
+        onDebug.fire(data.paymentTokenAmount, data.minDuration, data.maxDuration, data.collateral);
+        Object[] listingData = new Object[] { 1, GasToken.getHash(),
+                data.paymentTokenAmount,
+                data.minDuration, data.maxDuration, data.collateral, false, 0 };
+        boolean result = transfer(rentfuseContract(), tokenId, listingData);
+        if (!result) {
+            throw new Exception("listOnRentfuse_nep11TransferFail");
+        }
+
+    }
 
     private static boolean canExercise(int oraclePrice, int strike, int type, boolean safe) {
         return !safe || type == TYPE_CALL && oraclePrice > strike || type == TYPE_PUT && oraclePrice < strike;
@@ -503,6 +536,8 @@ public class CandefiNFT {
             throw new Exception("mint_invalidVi");
         }
 
+        // TODO: check rentfuse values?
+
         ByteString tokenId = nextTokenId();
         Map<String, Object> properties = new Map<>();
         properties.put(TOKEN_ID, tokenId);
@@ -528,6 +563,7 @@ public class CandefiNFT {
         new StorageMap(ctx, createStorageMapPrefix(writer, tokensOfKey)).put(tokenId, 1);
         new StorageMap(ctx, createStorageMapPrefix(writer, writerOfKey)).put(tokenId, 1);
         incrementBalanceByOne(writer);
+        listOnRentfuse(tokenId, data);
         onOptionMinted.fire(writer, tokenId, data.strike, stake, data.vdot, data.type, data.vi);
     }
 
@@ -645,7 +681,8 @@ public class CandefiNFT {
     }
 
     private static String getImageBaseURI() {
-        return Storage.getString(ctx, imageBaseUriKey);
+        return "https://gateway.pinata.cloud/ipfs/QmPRxppAdyiPPr9QCL7VS3h2V9XUpLsp8o4U2E64bJAqg7";
+        // return Storage.getString(ctx, imageBaseUriKey);
     }
 
     private static int getBalanceOf(Hash160 owner) {
@@ -741,6 +778,12 @@ public class CandefiNFT {
                 throw new Exception("deploy_minStake");
             }
             Storage.put(ctx, minStakeKey, minStake);
+
+            Hash160 rentfuse = (Hash160) arr[7];
+            if (!Hash160.isValid(rentfuse)) {
+                throw new Exception("deploy_invalidRentfuseHash");
+            }
+            Storage.put(ctx, rentfuseScriptHashKey, rentfuse);
         }
     }
 
@@ -752,6 +795,7 @@ public class CandefiNFT {
         ContractManagement.update(script, manifest);
     }
 
+    @io.neow3j.devpack.annotations.Struct
     static class TokenProperties {
 
         public ByteString tokenId;
