@@ -11,7 +11,6 @@ import io.neow3j.devpack.Runtime;
 import io.neow3j.devpack.Storage;
 import io.neow3j.devpack.StorageContext;
 import io.neow3j.devpack.StorageMap;
-import io.neow3j.devpack.StringLiteralHelper;
 import io.neow3j.devpack.Iterator.Struct;
 import io.neow3j.devpack.annotations.DisplayName;
 import io.neow3j.devpack.annotations.ManifestExtra;
@@ -27,7 +26,6 @@ import io.neow3j.devpack.contracts.GasToken;
 import io.neow3j.devpack.contracts.NeoToken;
 import io.neow3j.devpack.contracts.OracleContract;
 import io.neow3j.devpack.contracts.StdLib;
-import io.neow3j.devpack.events.Event1Arg;
 import io.neow3j.devpack.events.Event3Args;
 import io.neow3j.devpack.events.Event4Args;
 import io.neow3j.devpack.events.Event5Args;
@@ -205,6 +203,12 @@ public class CandefiNFT {
     }
 
     @Safe
+    public static Iterator<ByteString> tokensOfWriter(Hash160 owner) {
+        return (Iterator<ByteString>) Storage.find(ctx.asReadOnly(), createStorageMapPrefix(owner, writerOfKey),
+                (byte) (FindOptions.KeysOnly | FindOptions.RemovePrefix));
+    }
+
+    @Safe
     public static List<String> tokensOfJson(Hash160 owner) throws Exception {
         Iterator<Struct<ByteString, ByteString>> iterator = (Iterator<Struct<ByteString, ByteString>>) Storage.find(
                 ctx.asReadOnly(),
@@ -346,7 +350,7 @@ public class CandefiNFT {
     }
 
     @Safe
-    public static Iterator earnings() {
+    public static Iterator<Struct<ByteString, ByteString>> earnings() {
         return earnings.find(FindOptions.RemovePrefix);
     }
 
@@ -378,7 +382,14 @@ public class CandefiNFT {
 
     /* READ & WRITE */
 
-    public static void burn(ByteString tokenId) throws Exception {
+    public static void cancelListing(ByteString tokenId) throws Exception {
+        int listingId = (int) Contract.call(rentfuseContract(), "getListingIdFromNft", CallFlags.All,
+                new Object[] { Runtime.getExecutingScriptHash(), tokenId });
+        Contract.call(rentfuseContract(), "closeListing", CallFlags.All, new Object[] { listingId });
+        burn(tokenId);
+    }
+
+    private static void burn(ByteString tokenId) throws Exception {
         assert (Runtime.getInvocationCounter() == 1);
         Hash160 owner = ownerOf(tokenId);
         Hash160 writer = writerOf(tokenId);
@@ -400,6 +411,9 @@ public class CandefiNFT {
         int transferAmount = stakeOf(tokenId);
         safeTransfer(Runtime.getExecutingScriptHash(), candyContract(), writer,
                 transferAmount);
+        if (exercised(tokenId)) {
+            increaseEarnings(owner, transferAmount);
+        }
         exercised.delete(tokenId);
         stakes.delete(tokenId);
         onBurn.fire(writer, tokenId, transferAmount);
@@ -437,11 +451,19 @@ public class CandefiNFT {
         if (!Runtime.checkWitness(owner)) {
             throw new Exception("exercise_noAuth");
         }
-        oracle("oracleExercise", tokenId);
+        if (exercised(tokenId)) {
+            throw new Exception("exercise_alreadyExercised");
+        }
+        ByteString properties = immutableTokenProperties.get(tokenId);
+        if (properties == null) {
+            throw new Exception("exercise_tokenDoesNotExist");
+        }
+        oracle("oracleResponse", tokenId);
     }
 
-    public static void oracleExercise(String url, Object userData, int responseCode, ByteString response)
+    public static void oracleResponse(String url, Object userData, int responseCode, ByteString response)
             throws Exception {
+
         assert (Runtime.getInvocationCounter() == 1);
         if (responseCode != ORACLE_SUCCESS_RESPONSE_CODE) {
             throw new Exception("oracleExercise_noSuccessResponse");
@@ -461,7 +483,8 @@ public class CandefiNFT {
                 .jsonDeserialize(response.toString());
 
         int oraclePrice = decimalStringToInt((String) result.get("price"));
-        if (!canExercise(oraclePrice, properties.strike, properties.type, properties.safe)) {
+        if (!canExercise(oraclePrice, properties.strike, properties.type,
+                properties.safe)) {
             throw new Exception("oracleExercise_cantExercise");
         }
         int stake = stakeOf(tokenId);
@@ -474,20 +497,25 @@ public class CandefiNFT {
         if (stake - transferAmount < 0) {
             throw new Exception("oracleExercise_stakeValueMismatch");
         }
+        onDebug.fire(1, null, null, null);
+
         exercised.put(tokenId, 1);
         stakes.put(tokenId, stake - transferAmount);
-        safeTransfer(Runtime.getExecutingScriptHash(), NeoToken.getHash(), owner, transferAmount);
-        increaseClaims(owner, transferAmount);
-        onExercise.fire(owner, tokenId, properties.type, transferAmount, properties.strike);
+        onDebug.fire(2, null, null, null);
+
+        safeTransfer(Runtime.getExecutingScriptHash(), candyContract(), owner,
+                transferAmount);
+        onDebug.fire(3, null, null, null);
+
+        increaseEarnings(owner, transferAmount);
+        onDebug.fire(4, null, null, null);
+
+        onExercise.fire(owner, tokenId, properties.type, transferAmount,
+                properties.strike);
+
     }
 
     /* UTIL */
-
-    /*
-     * [1, paymentTokenScriptHash: UInt160, paymentTokenAmount: BigInteger,
-     * minDuration: uint, maxDuration: uint, collateral: BigInteger, proxyMode:
-     * boolean, allowedDelay: uint]
-     */
 
     private static void listOnRentfuse(ByteString tokenId, Request data) throws Exception {
         onDebug.fire(data.paymentTokenAmount, data.minDuration, data.maxDuration, data.collateral);
@@ -541,8 +569,12 @@ public class CandefiNFT {
         ByteString tokenId = nextTokenId();
         Map<String, Object> properties = new Map<>();
         properties.put(TOKEN_ID, tokenId);
-        properties.put(NAME, "Name Placeholder");
-        properties.put(DESC, "Description Placeholder");
+        if (data.type == TYPE_CALL) {
+            properties.put(NAME, "Candefi Call NFT");
+        } else {
+            properties.put(NAME, "Candefi Put NFT");
+        }
+        properties.put(DESC, "Candefi NFT collection");
         properties.put(TOKEN_URI, "");
         properties.put(IMAGE, getImageBaseURI());
         properties.put(STAKE, stake);
@@ -567,7 +599,7 @@ public class CandefiNFT {
         onOptionMinted.fire(writer, tokenId, data.strike, stake, data.vdot, data.type, data.vi);
     }
 
-    private static void increaseClaims(Hash160 account, int amount) {
+    private static void increaseEarnings(Hash160 account, int amount) {
         int earned = earningsOf(account);
         earnings.put(account.toByteArray(), amount + earned);
     }
@@ -586,7 +618,7 @@ public class CandefiNFT {
     }
 
     private static void oracle(String callback, Object userData) {
-        // TODO: refactor
+        // TODO: refactor, make more generic
         String endpoint = Storage.getString(ctx, oracleEndpointKey) + "NEOUSDT";
         OracleContract.request(endpoint, null, callback, userData, 10000000);
     }
@@ -681,7 +713,7 @@ public class CandefiNFT {
     }
 
     private static String getImageBaseURI() {
-        return "https://gateway.pinata.cloud/ipfs/QmPRxppAdyiPPr9QCL7VS3h2V9XUpLsp8o4U2E64bJAqg7";
+        return "ipfs://QmPRxppAdyiPPr9QCL7VS3h2V9XUpLsp8o4U2E64bJAqg7";
         // return Storage.getString(ctx, imageBaseUriKey);
     }
 
@@ -719,7 +751,7 @@ public class CandefiNFT {
 
     public static void updateMinStake(int minStake) throws Exception {
         onlyOwner();
-        if (minStake < 100) {
+        if (minStake < 5000) {
             throw new Exception("updateMinStake_invalidAmount");
         }
         Storage.put(ctx, minStakeKey, minStake);
