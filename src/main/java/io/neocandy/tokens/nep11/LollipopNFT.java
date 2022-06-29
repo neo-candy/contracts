@@ -11,6 +11,7 @@ import io.neow3j.devpack.Runtime;
 import io.neow3j.devpack.Storage;
 import io.neow3j.devpack.StorageContext;
 import io.neow3j.devpack.StorageMap;
+import io.neow3j.devpack.StringLiteralHelper;
 import io.neow3j.devpack.Iterator.Struct;
 import io.neow3j.devpack.annotations.DisplayName;
 import io.neow3j.devpack.annotations.ManifestExtra;
@@ -29,16 +30,16 @@ import io.neow3j.devpack.events.Event4Args;
 
 import static io.neocandy.games.candyclash.CandyClashUtils.createStorageMapPrefix;
 
-@ManifestExtra(key = "name", value = "NeoCandyNFT Contract")
+@ManifestExtra(key = "name", value = "LollipopNFT Contract")
 @ManifestExtra(key = "author", value = "NeoCandy")
-@ManifestExtra(key = "description", value = "NeoCandy NFT Collection")
+@ManifestExtra(key = "description", value = "Lollipop NFT Collection")
 @ManifestExtra(key = "email", value = "hello@neocandy.io")
+@ManifestExtra(key = "source", value = "https://github.com/neo-candy")
 @Permission(contract = "*", methods = { "onNEP11Payment", "transfer" })
 @Permission(nativeContract = NativeContract.ContractManagement)
-public class NeoCandyNFT {
+public class LollipopNFT {
 
     // EVENTS
-
     @DisplayName("Mint")
     private static Event2Args<Hash160, ByteString> onMint;
 
@@ -63,9 +64,6 @@ public class NeoCandyNFT {
 
     // NFT attributes
     private static final String ATTRIBUTES = "attributes";
-    private static final String ATTRIBUTE_TRAIT_TYPE = "trait_type";
-    private static final String ATTRIBUTE_VALUE = "value";
-    private static final String ATTRIBUTE_DISPLAY_TYPE = "display_type";
 
     // ROYALTIES
     private static final String ROYALTIES_ADDRESS = "address";
@@ -74,16 +72,16 @@ public class NeoCandyNFT {
     private static final StorageContext ctx = Storage.getStorageContext();
 
     // STORAGE KEYS
-    private static final byte[] ownerkey = Helper.toByteArray((byte) 1);
-    private static final byte[] maxSupplyKey = Helper.toByteArray((byte) 2);
-    private static final byte[] nftPriceTableKey = Helper.toByteArray((byte) 3);
-    private static final byte[] candyContractHashKey = Helper.toByteArray((byte) 4);
-    private static final byte[] tokensOfKey = Helper.toByteArray((byte) 5);
-    private static final byte[] imageBaseUriKey = Helper.toByteArray((byte) 6);
-    private static final byte[] currentSupplyKey = Helper.toByteArray((byte) 7);
-    private static final byte[] isPausedKey = Helper.toByteArray((byte) 8);
-    private static final byte[] royaltiesReceiverKey = Helper.toByteArray((byte) 9);
-    private static final byte[] royaltiesAmountKey = Helper.toByteArray((byte) 10);
+    private static final byte[] ownerKey = Helper.toByteArray((byte) 5);
+    private static final byte[] maxSupplyKey = Helper.toByteArray((byte) 6);
+    private static final byte[] candyContractHashKey = Helper.toByteArray((byte) 7);
+    private static final byte[] tokensOfKey = Helper.toByteArray((byte) 8);
+    private static final byte[] imageBaseUriKey = Helper.toByteArray((byte) 9);
+    private static final byte[] currentSupplyKey = Helper.toByteArray((byte) 10);
+    private static final byte[] isPausedKey = Helper.toByteArray((byte) 11);
+    private static final byte[] royaltiesReceiverKey = Helper.toByteArray((byte) 12);
+    private static final byte[] royaltiesAmountKey = Helper.toByteArray((byte) 13);
+    private static final byte[] currentPriceKey = Helper.toByteArray((byte) 14);
 
     // STORAGE MAPS
     private static final StorageMap tokens = new StorageMap(ctx, Helper.toByteArray((byte) 101));
@@ -104,11 +102,12 @@ public class NeoCandyNFT {
         if (token != candyContract()) {
             throw new Exception("onPayment_onlyCandy");
         }
-        if (data == null) {
-            if (currentSupply() >= maxSupply()) {
-                throw new Exception("onPayment_soldOut");
-            }
+
+        if (amount != currentPrice()) {
+            throw new Exception("onPayment_invalidPrice");
+
         }
+        mint(from);
         onPayment.fire(from, amount, data);
     }
 
@@ -116,7 +115,7 @@ public class NeoCandyNFT {
 
     @Safe
     public static Hash160 contractOwner() {
-        return new Hash160(Storage.get(ctx, ownerkey));
+        return new Hash160(Storage.get(ctx.asReadOnly(), ownerKey));
     }
 
     /**
@@ -126,8 +125,8 @@ public class NeoCandyNFT {
      */
     @Safe
     public static String getRoyalties() {
-        String receiverAddress = Storage.getString(ctx, royaltiesReceiverKey);
-        int amount = Storage.getInt(ctx, royaltiesAmountKey);
+        String receiverAddress = Storage.getString(ctx.asReadOnly(), royaltiesReceiverKey);
+        int amount = Storage.getInt(ctx.asReadOnly(), royaltiesAmountKey);
         Map<String, Object> map = new Map<>();
         map.put(ROYALTIES_ADDRESS, receiverAddress);
         map.put(ROYALTIES_VALUE, StdLib.jsonSerialize(amount));
@@ -137,7 +136,7 @@ public class NeoCandyNFT {
 
     @Safe
     public static String symbol() {
-        return "CNFT";
+        return "LOLLI";
     }
 
     @Safe
@@ -147,7 +146,7 @@ public class NeoCandyNFT {
 
     @Safe
     public static int maxSupply() {
-        return Storage.getInt(ctx, maxSupplyKey);
+        return Storage.getInt(ctx.asReadOnly(), maxSupplyKey);
     }
 
     @Safe
@@ -157,17 +156,17 @@ public class NeoCandyNFT {
 
     @Safe
     public static int currentSupply() {
-        return Storage.getIntOrZero(ctx, currentSupplyKey);
+        return Storage.getIntOrZero(ctx.asReadOnly(), currentSupplyKey);
     }
 
     @Safe
     public static boolean isPaused() {
-        return Storage.getInt(ctx, isPausedKey) == 1;
+        return Storage.getInt(ctx.asReadOnly(), isPausedKey) == 1;
     }
 
     @Safe
-    public static int[] nftPricesCandy() {
-        return (int[]) StdLib.deserialize(Storage.get(ctx, nftPriceTableKey));
+    public static int currentPrice() {
+        return Storage.getIntOrZero(ctx.asReadOnly(), currentPriceKey);
     }
 
     @Safe
@@ -190,6 +189,12 @@ public class NeoCandyNFT {
             tokens.add(propertiesJson(result));
         }
         return tokens;
+    }
+
+    @Safe
+    public static Hash160 candyContract() {
+        ByteString result = Storage.get(ctx.asReadOnly(), candyContractHashKey);
+        return result != null ? new Hash160(result) : null;
     }
 
     @Safe
@@ -262,28 +267,57 @@ public class NeoCandyNFT {
 
     /* UTIL */
 
-    private static void mint(Hash160 owner, int gen) throws Exception {
+    private static void updateCurrentPrice() {
+        int candyPrice = 0;
+        int cs = currentSupply();
+        if (cs == 22) {
+            candyPrice = StringLiteralHelper.stringToInt("500000000000000");
+            Storage.put(ctx, currentPriceKey, candyPrice);
+        } else if (cs == 50) {
+            candyPrice = StringLiteralHelper.stringToInt("1000000000000000");
+            Storage.put(ctx, currentPriceKey, candyPrice);
+        } else if (cs == 100) {
+            candyPrice = StringLiteralHelper.stringToInt("1250000000000000");
+            Storage.put(ctx, currentPriceKey, candyPrice);
+        } else if (cs == 150) {
+            candyPrice = StringLiteralHelper.stringToInt("1500000000000000");
+            Storage.put(ctx, currentPriceKey, candyPrice);
+        } else if (cs == 200) {
+            candyPrice = StringLiteralHelper.stringToInt("2000000000000000");
+            Storage.put(ctx, currentPriceKey, candyPrice);
+        } else if (cs == 218) {
+            candyPrice = StringLiteralHelper.stringToInt("3000000000000000");
+            Storage.put(ctx, currentPriceKey, candyPrice);
+        } else if (cs == 220) {
+            candyPrice = StringLiteralHelper.stringToInt("4000000000000000");
+            Storage.put(ctx, currentPriceKey, candyPrice);
+        }
+    }
+
+    private static void mint(Hash160 owner) throws Exception {
+        if (currentSupply() >= maxSupply()) {
+            throw new Exception("onPayment_soldOut");
+        }
         int currentSupply = currentSupply();
-        String cs = StdLib.itoa(++currentSupply, 10);
+        String cs = StdLib.itoa(currentSupply, 10);
         ByteString tokenId = new ByteString(cs);
         Map<String, Object> properties = new Map<>();
         properties.put(TOKEN_ID, cs);
+        properties.put(NAME, "Name Placeholder");
         properties.put(DESC, "Description Placeholder");
         properties.put(TOKEN_URI, "");
         properties.put(IMAGE, getImageBaseURI() + currentSupply + ".png");
-
         incrementCurrentSupplyByOne();
+        updateCurrentPrice();
+
         saveProperties(properties, tokenId);
         tokens.put(tokenId, tokenId);
         ownerOfMap.put(tokenId, owner);
-        new StorageMap(ctx, createStorageMapPrefix(owner, tokensOfKey)).put(tokenId, 1);
+        new StorageMap(ctx, createStorageMapPrefix(owner, tokensOfKey)).put(tokenId,
+                1);
         incrementBalanceByOne(owner);
         onMint.fire(owner, tokenId);
-    }
 
-    private static Hash160 candyContract() {
-        ByteString result = Storage.get(ctx, candyContractHashKey);
-        return result != null ? new Hash160(result) : null;
     }
 
     private static void saveProperties(Map<String, Object> properties, ByteString tokenId) throws Exception {
@@ -313,14 +347,6 @@ public class NeoCandyNFT {
         immutableTokenProperties.put(tokenId, StdLib.serialize(tokenProps));
     }
 
-    private static Map<String, Object> getAttributeMap(String trait, Object value) {
-        Map<String, Object> m = new Map<>();
-        m.put(ATTRIBUTE_TRAIT_TYPE, trait);
-        m.put(ATTRIBUTE_VALUE, value);
-        m.put(ATTRIBUTE_DISPLAY_TYPE, "");
-        return m;
-    }
-
     private static void incrementBalanceByOne(Hash160 owner) {
         balances.put(owner.toByteArray(), getBalanceOf(owner) + 1);
     }
@@ -330,7 +356,7 @@ public class NeoCandyNFT {
     }
 
     private static String getImageBaseURI() {
-        return Storage.getString(ctx, imageBaseUriKey);
+        return Storage.getString(ctx.asReadOnly(), imageBaseUriKey);
     }
 
     private static int getBalanceOf(Hash160 owner) {
@@ -341,7 +367,7 @@ public class NeoCandyNFT {
     }
 
     private static void incrementCurrentSupplyByOne() {
-        int updatedCurrentSupply = Storage.getInt(ctx, currentSupplyKey) + 1;
+        int updatedCurrentSupply = currentSupply() + 1;
         Storage.put(ctx, currentSupplyKey, updatedCurrentSupply);
     }
 
@@ -355,25 +381,14 @@ public class NeoCandyNFT {
 
     /* OWNER ONLY METHODS */
 
-    public static void updateCandyPriceTable(int[] table) throws Exception {
+    public static void adminMint() throws Exception {
         onlyOwner();
-        if (table.length < 2) {
-            throw new Exception("updateCandyPriceTable_invalidTableLength");
-        }
-        Storage.put(ctx, nftPriceTableKey, StdLib.serialize(table));
+        mint(contractOwner());
     }
 
     public static void updateImageBaseURI(String uri) throws Exception {
         onlyOwner();
         Storage.put(ctx, imageBaseUriKey, uri);
-    }
-
-    public static void updateMaxSupply(int amount) throws Exception {
-        onlyOwner();
-        if (amount < currentSupply() || amount <= 0) {
-            throw new Exception("updateMaxSupply_invalidAmount");
-        }
-        Storage.put(ctx, maxSupplyKey, amount);
     }
 
     public static void updatePause(boolean paused) throws Exception {
@@ -392,45 +407,43 @@ public class NeoCandyNFT {
             if (!Hash160.isValid(owner)) {
                 throw new Exception("deploy_invalidOwner");
             }
-            Storage.put(ctx, ownerkey, owner);
+            Storage.put(ctx, ownerKey, owner);
 
-            int[] candyPriceTable = (int[]) arr[1];
-            if (candyPriceTable.length < 2) {
-                throw new Exception("deploy_invalidCandyPriceTableLength");
-            }
-            Storage.put(ctx, nftPriceTableKey, StdLib.serialize(candyPriceTable));
-
-            Hash160 candyHash = (Hash160) arr[2];
+            Hash160 candyHash = (Hash160) arr[1];
             if (!Hash160.isValid(candyHash)) {
                 throw new Exception("deploy_invalidCandyHash");
             }
             Storage.put(ctx, candyContractHashKey, candyHash);
 
-            String imageBaseURI = (String) arr[3];
+            String imageBaseURI = (String) arr[2];
             if (imageBaseURI.length() == 0) {
                 throw new Exception("deploy_invalidImageBaseURI");
             }
             Storage.put(ctx, imageBaseUriKey, imageBaseURI);
 
-            int maxSupply = (int) arr[4];
+            int maxSupply = (int) arr[3];
             if (maxSupply < 1) {
                 throw new Exception("deploy_maxSupply");
             }
             Storage.put(ctx, maxSupplyKey, maxSupply);
 
-            Storage.put(ctx, isPausedKey, (int) arr[5]);
+            Storage.put(ctx, isPausedKey, 1);
 
-            String royaltiesReceiverAddress = (String) arr[6];
+            String royaltiesReceiverAddress = (String) arr[4];
             if (royaltiesReceiverAddress.length() == 0) {
                 throw new Exception("deploy_royaltiesReceiverAddress ");
             }
             Storage.put(ctx, royaltiesReceiverKey, royaltiesReceiverAddress);
 
-            int royaltiesAmount = (int) arr[7];
+            int royaltiesAmount = (int) arr[5];
             if (royaltiesAmount <= 0) {
                 throw new Exception("deploy_royaltiesAmount");
             }
             Storage.put(ctx, royaltiesAmountKey, royaltiesAmount);
+
+            for (int i = 0; i < 22; i++) {
+                mint(contractOwner());
+            }
         }
     }
 

@@ -23,7 +23,6 @@ import io.neow3j.devpack.constants.FindOptions;
 import io.neow3j.devpack.constants.NativeContract;
 import io.neow3j.devpack.contracts.ContractManagement;
 import io.neow3j.devpack.contracts.GasToken;
-import io.neow3j.devpack.contracts.NeoToken;
 import io.neow3j.devpack.contracts.OracleContract;
 import io.neow3j.devpack.contracts.StdLib;
 import io.neow3j.devpack.events.Event3Args;
@@ -35,6 +34,7 @@ import io.neow3j.devpack.events.Event7Args;
 @ManifestExtra(key = "author", value = "NeoCandy")
 @ManifestExtra(key = "description", value = "CandeFi NFT Collection")
 @ManifestExtra(key = "email", value = "hello@neocandy.io")
+@ManifestExtra(key = "source", value = "tba")
 @Permission(contract = "*", methods = { "onNEP11Payment", "transfer" })
 @Permission(nativeContract = NativeContract.ContractManagement)
 @Permission(nativeContract = NativeContract.OracleContract)
@@ -168,7 +168,7 @@ public class CandefiNFT {
 
     @Safe
     public static Hash160 contractOwner() {
-        return new Hash160(Storage.get(ctx, ownerkey));
+        return new Hash160(Storage.get(ctx.asReadOnly(), ownerkey));
     }
 
     @Safe
@@ -188,12 +188,12 @@ public class CandefiNFT {
 
     @Safe
     public static int currentSupply() {
-        return Storage.getIntOrZero(ctx, currentSupplyKey);
+        return Storage.getIntOrZero(ctx.asReadOnly(), currentSupplyKey);
     }
 
     @Safe
     public static boolean isPaused() {
-        return Storage.getInt(ctx, isPausedKey) == 1;
+        return Storage.getInt(ctx.asReadOnly(), isPausedKey) == 1;
     }
 
     @Safe
@@ -341,7 +341,7 @@ public class CandefiNFT {
 
     @Safe
     public static String oracleEndpoint() {
-        return Storage.getString(ctx, oracleEndpointKey);
+        return Storage.getString(ctx.asReadOnly(), oracleEndpointKey);
     }
 
     @Safe
@@ -349,19 +349,28 @@ public class CandefiNFT {
         return earnings.getIntOrZero(account.toByteArray());
     }
 
+    // TODO: remove and handle this with a backend, block parser, db
     @Safe
-    public static Iterator<Struct<ByteString, ByteString>> earnings() {
-        return earnings.find(FindOptions.RemovePrefix);
+    public static String earnings() {
+        List<String> earningList = new List<>();
+        Iterator<Struct<ByteString, ByteString>> list = earnings.find(FindOptions.RemovePrefix);
+        while (list.next()) {
+            Map<String, Integer> earningsForAddress = new Map<>();
+            String address = StdLib.base64Encode(list.get().key);
+            earningsForAddress.put(address, earningsOf(new Hash160(list.get().key)));
+            earningList.add(StdLib.jsonSerialize(earningsForAddress));
+        }
+        return StdLib.jsonSerialize(earningList);
     }
 
     @Safe
     public static int minStake() {
-        return Storage.getInt(ctx, minStakeKey);
+        return Storage.getInt(ctx.asReadOnly(), minStakeKey);
     }
 
     @Safe
     public static int protocolFee() {
-        return Storage.getInt(ctx, protocolFeeKey);
+        return Storage.getInt(ctx.asReadOnly(), protocolFeeKey);
     }
 
     @Safe
@@ -377,13 +386,13 @@ public class CandefiNFT {
 
     @Safe
     public static Hash160 rentfuseContract() {
-        return new Hash160(Storage.get(ctx, rentfuseScriptHashKey));
+        return new Hash160(Storage.get(ctx.asReadOnly(), rentfuseScriptHashKey));
     }
 
     /* READ & WRITE */
 
     public static void cancelListing(ByteString tokenId) throws Exception {
-        int listingId = (int) Contract.call(rentfuseContract(), "getListingIdFromNft", CallFlags.All,
+        int listingId = (int) Contract.call(rentfuseContract(), "getListingIdFromNft", CallFlags.ReadOnly,
                 new Object[] { Runtime.getExecutingScriptHash(), tokenId });
         Contract.call(rentfuseContract(), "closeListing", CallFlags.All, new Object[] { listingId });
         burn(tokenId);
@@ -497,18 +506,14 @@ public class CandefiNFT {
         if (stake - transferAmount < 0) {
             throw new Exception("oracleExercise_stakeValueMismatch");
         }
-        onDebug.fire(1, null, null, null);
 
         exercised.put(tokenId, 1);
         stakes.put(tokenId, stake - transferAmount);
-        onDebug.fire(2, null, null, null);
 
         safeTransfer(Runtime.getExecutingScriptHash(), candyContract(), owner,
                 transferAmount);
-        onDebug.fire(3, null, null, null);
 
         increaseEarnings(owner, transferAmount);
-        onDebug.fire(4, null, null, null);
 
         onExercise.fire(owner, tokenId, properties.type, transferAmount,
                 properties.strike);
@@ -620,7 +625,7 @@ public class CandefiNFT {
     private static void oracle(String callback, Object userData) {
         // TODO: refactor, make more generic
         String endpoint = Storage.getString(ctx, oracleEndpointKey) + "NEOUSDT";
-        OracleContract.request(endpoint, null, callback, userData, 10000000);
+        OracleContract.request(endpoint, null, callback, userData, 20000000);
     }
 
     private static ByteString nextTokenId() {
