@@ -1,4 +1,4 @@
-package io.neocandy.tokens.nep11;
+package io.neocandy.tokens.nep11.lollipop;
 
 import io.neow3j.devpack.ByteString;
 import io.neow3j.devpack.Contract;
@@ -19,9 +19,11 @@ import io.neow3j.devpack.annotations.Permission;
 import io.neow3j.devpack.annotations.OnDeployment;
 import io.neow3j.devpack.annotations.OnNEP17Payment;
 import io.neow3j.devpack.annotations.Safe;
+import io.neow3j.devpack.annotations.SupportedStandard;
 import io.neow3j.devpack.constants.CallFlags;
 import io.neow3j.devpack.constants.FindOptions;
 import io.neow3j.devpack.constants.NativeContract;
+import io.neow3j.devpack.constants.NeoStandard;
 import io.neow3j.devpack.contracts.ContractManagement;
 import io.neow3j.devpack.contracts.StdLib;
 import io.neow3j.devpack.events.Event2Args;
@@ -37,6 +39,7 @@ import static io.neocandy.games.candyclash.CandyClashUtils.createStorageMapPrefi
 @ManifestExtra(key = "source", value = "https://github.com/neo-candy")
 @Permission(contract = "*", methods = { "onNEP11Payment", "transfer" })
 @Permission(nativeContract = NativeContract.ContractManagement)
+@SupportedStandard(neoStandard = NeoStandard.NEP_11)
 public class LollipopNFT {
 
     // EVENTS
@@ -136,7 +139,7 @@ public class LollipopNFT {
 
     @Safe
     public static String symbol() {
-        return "LOLLI";
+        return "POP";
     }
 
     @Safe
@@ -150,7 +153,10 @@ public class LollipopNFT {
     }
 
     @Safe
-    public static int balanceOf(Hash160 owner) {
+    public static int balanceOf(Hash160 owner) throws Exception {
+        if (!Hash160.isValid(owner)) {
+            throw new Exception("balanceOf_invalidHash");
+        }
         return getBalanceOf(owner);
     }
 
@@ -170,11 +176,12 @@ public class LollipopNFT {
     }
 
     @Safe
-    public static Iterator<ByteString> tokensOf(Hash160 owner) {
-        return (Iterator<ByteString>) Storage.find(
-                ctx.asReadOnly(),
-                createStorageMapPrefix(owner, tokensOfKey),
-                FindOptions.RemovePrefix);
+    public static Iterator<ByteString> tokensOf(Hash160 owner) throws Exception {
+        if (!Hash160.isValid(owner)) {
+            throw new Exception("tokensOf_invalidHash");
+        }
+        return (Iterator<ByteString>) Storage.find(ctx.asReadOnly(), createStorageMapPrefix(owner, tokensOfKey),
+                (byte) (FindOptions.KeysOnly | FindOptions.RemovePrefix));
     }
 
     @Safe
@@ -245,22 +252,28 @@ public class LollipopNFT {
     /* READ & WRITE */
 
     public static boolean transfer(Hash160 to, ByteString tokenId, Object data) throws Exception {
-        Hash160 owner = ownerOf(tokenId);
-        if (owner == null) {
-            throw new Exception("transfer_tokenDoesNotExist");
+        if (!Hash160.isValid(to)) {
+            throw new Exception("transfer_invalidHash");
         }
-        ownerOfMap.put(tokenId, to.toByteArray());
-        new StorageMap(ctx, createStorageMapPrefix(owner, tokensOfKey)).delete(tokenId);
-        new StorageMap(ctx, createStorageMapPrefix(to, tokensOfKey)).put(tokenId, 1);
-
-        decrementBalanceByOne(owner);
-        incrementBalanceByOne(to);
-
+        if (tokenId.length() > 64) {
+            throw new Exception("transfer_invalidTokenId");
+        }
+        Hash160 owner = ownerOf(tokenId);
+        if (!Runtime.checkWitness(owner)) {
+            return false;
+        }
         onTransfer.fire(owner, to, 1, tokenId);
+        if (owner != to) {
+            ownerOfMap.put(tokenId, to.toByteArray());
 
+            new StorageMap(ctx, createStorageMapPrefix(owner, tokensOfKey)).delete(tokenId);
+            new StorageMap(ctx, createStorageMapPrefix(to, tokensOfKey)).put(tokenId, 1);
+
+            decrementBalanceByOne(owner);
+            incrementBalanceByOne(to);
+        }
         if (ContractManagement.getContract(to) != null) {
-            Contract.call(to, "onNEP11Payment", CallFlags.All,
-                    new Object[] { owner, 1, tokenId, data });
+            Contract.call(to, "onNEP11Payment", CallFlags.All, new Object[] { owner, 1, tokenId, data });
         }
         return true;
     }
@@ -303,8 +316,9 @@ public class LollipopNFT {
         ByteString tokenId = new ByteString(cs);
         Map<String, Object> properties = new Map<>();
         properties.put(TOKEN_ID, cs);
-        properties.put(NAME, "Name Placeholder");
-        properties.put(DESC, "Description Placeholder");
+        properties.put(NAME, "NeoCandy Lollipop");
+        properties.put(DESC,
+                "A collection of 222 unique lollipop NFTs. Holders can participate in exclusive events, NFT claims, airdrops, giveaways, and more.");
         properties.put(TOKEN_URI, "");
         properties.put(IMAGE, getImageBaseURI() + currentSupply + ".png");
         incrementCurrentSupplyByOne();
@@ -317,7 +331,6 @@ public class LollipopNFT {
                 1);
         incrementBalanceByOne(owner);
         onMint.fire(owner, tokenId);
-
     }
 
     private static void saveProperties(Map<String, Object> properties, ByteString tokenId) throws Exception {
@@ -381,6 +394,12 @@ public class LollipopNFT {
 
     /* OWNER ONLY METHODS */
 
+    public static void getCandy(int amount) throws Exception {
+        onlyOwner();
+        Contract.call(candyContract(), "transfer", CallFlags.All,
+                new Object[] { Runtime.getExecutingScriptHash(), contractOwner(), amount, null });
+    }
+
     public static void adminMint() throws Exception {
         onlyOwner();
         mint(contractOwner());
@@ -420,22 +439,16 @@ public class LollipopNFT {
                 throw new Exception("deploy_invalidImageBaseURI");
             }
             Storage.put(ctx, imageBaseUriKey, imageBaseURI);
-
-            int maxSupply = (int) arr[3];
-            if (maxSupply < 1) {
-                throw new Exception("deploy_maxSupply");
-            }
-            Storage.put(ctx, maxSupplyKey, maxSupply);
-
+            Storage.put(ctx, maxSupplyKey, 222);
             Storage.put(ctx, isPausedKey, 1);
 
-            String royaltiesReceiverAddress = (String) arr[4];
+            String royaltiesReceiverAddress = (String) arr[3];
             if (royaltiesReceiverAddress.length() == 0) {
                 throw new Exception("deploy_royaltiesReceiverAddress ");
             }
             Storage.put(ctx, royaltiesReceiverKey, royaltiesReceiverAddress);
 
-            int royaltiesAmount = (int) arr[5];
+            int royaltiesAmount = (int) arr[4];
             if (royaltiesAmount <= 0) {
                 throw new Exception("deploy_royaltiesAmount");
             }

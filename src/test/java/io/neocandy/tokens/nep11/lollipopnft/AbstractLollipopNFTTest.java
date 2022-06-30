@@ -6,7 +6,7 @@ import org.junit.jupiter.api.extension.RegisterExtension;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import io.neocandy.tokens.nep11.LollipopNFT;
+import io.neocandy.tokens.nep11.lollipop.LollipopNFT;
 import io.neocandy.tokens.nep17.NeoCandy;
 import io.neow3j.contract.FungibleToken;
 import io.neow3j.contract.GasToken;
@@ -74,11 +74,10 @@ public abstract class AbstractLollipopNFTTest {
         ContractParameter owner = hash160(ext.getAccount("NQcSTBwSJs7hcFUZzku2QdPNLe2dkTGok2").getScriptHash());
         ContractParameter candy = hash160(ctx.getDeployedContract(NeoCandy.class).getScriptHash());
         ContractParameter imageBase = string(IMAGE_BASE);
-        ContractParameter maxSupply = integer(MAX_SUPPLY);
         ContractParameter royaltiesReceiverAddress = string(
                 ext.getAccount("NQcSTBwSJs7hcFUZzku2QdPNLe2dkTGok2").getAddress());
         ContractParameter royaltiesAmount = integer(ROYALTIES_AMOUNT);
-        ContractParameter params = array(owner, candy, imageBase, maxSupply, royaltiesReceiverAddress,
+        ContractParameter params = array(owner, candy, imageBase, royaltiesReceiverAddress,
                 royaltiesAmount);
         config.setDeployParam(params);
         return config;

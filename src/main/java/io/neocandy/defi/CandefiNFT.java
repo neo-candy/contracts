@@ -18,9 +18,11 @@ import io.neow3j.devpack.annotations.Permission;
 import io.neow3j.devpack.annotations.OnDeployment;
 import io.neow3j.devpack.annotations.OnNEP17Payment;
 import io.neow3j.devpack.annotations.Safe;
+import io.neow3j.devpack.annotations.SupportedStandard;
 import io.neow3j.devpack.constants.CallFlags;
 import io.neow3j.devpack.constants.FindOptions;
 import io.neow3j.devpack.constants.NativeContract;
+import io.neow3j.devpack.constants.NeoStandard;
 import io.neow3j.devpack.contracts.ContractManagement;
 import io.neow3j.devpack.contracts.GasToken;
 import io.neow3j.devpack.contracts.OracleContract;
@@ -39,6 +41,7 @@ import io.neow3j.devpack.events.Event7Args;
 @Permission(nativeContract = NativeContract.ContractManagement)
 @Permission(nativeContract = NativeContract.OracleContract)
 @Permission(contract = "0xd094715400b84a1b4396df3c7015ab0bd60baf03", methods = "*")
+@SupportedStandard(neoStandard = NeoStandard.NEP_11)
 public class CandefiNFT {
 
     // EVENTS
@@ -430,23 +433,28 @@ public class CandefiNFT {
     }
 
     public static boolean transfer(Hash160 to, ByteString tokenId, Object data) throws Exception {
-        Hash160 owner = ownerOf(tokenId);
-        if (owner == null) {
-            throw new Exception("transfer_tokenDoesNotExist");
+        if (!Hash160.isValid(to)) {
+            throw new Exception("transfer_invalidHash");
         }
-        ownerOfMap.put(tokenId, to.toByteArray());
+        if (tokenId.length() > 64) {
+            throw new Exception("transfer_invalidTokenId");
+        }
+        Hash160 owner = ownerOf(tokenId);
+        if (!Runtime.checkWitness(owner)) {
+            return false;
+        }
+        onTransfer.fire(owner, to, 1, tokenId);
         if (owner != to) {
+            ownerOfMap.put(tokenId, to.toByteArray());
+
             new StorageMap(ctx, createStorageMapPrefix(owner, tokensOfKey)).delete(tokenId);
             new StorageMap(ctx, createStorageMapPrefix(to, tokensOfKey)).put(tokenId, 1);
 
             decrementBalanceByOne(owner);
             incrementBalanceByOne(to);
-
-            onTransfer.fire(owner, to, 1, tokenId);
         }
         if (ContractManagement.getContract(to) != null) {
-            Contract.call(to, "onNEP11Payment", CallFlags.All,
-                    new Object[] { owner, 1, tokenId, data });
+            Contract.call(to, "onNEP11Payment", CallFlags.All, new Object[] { owner, 1, tokenId, data });
         }
         return true;
     }

@@ -34,6 +34,7 @@ public class TestHelper {
     protected static final String CURRENT_SUPPLY = "currentSupply";
     protected static final String IS_PAUSED = "isPaused";
     protected static final String ADMIN_MINT = "adminMint";
+    protected static final String GET_CANDY = "getCandy";
 
     protected static final Logger log = LoggerFactory.getLogger(TestHelper.class);
 
