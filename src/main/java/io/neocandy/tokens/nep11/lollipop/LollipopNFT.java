@@ -68,10 +68,6 @@ public class LollipopNFT {
     // NFT attributes
     private static final String ATTRIBUTES = "attributes";
 
-    // ROYALTIES
-    private static final String ROYALTIES_ADDRESS = "address";
-    private static final String ROYALTIES_VALUE = "value";
-
     private static final StorageContext ctx = Storage.getStorageContext();
 
     // STORAGE KEYS
@@ -82,9 +78,7 @@ public class LollipopNFT {
     private static final byte[] imageBaseUriKey = Helper.toByteArray((byte) 9);
     private static final byte[] currentSupplyKey = Helper.toByteArray((byte) 10);
     private static final byte[] isPausedKey = Helper.toByteArray((byte) 11);
-    private static final byte[] royaltiesReceiverKey = Helper.toByteArray((byte) 12);
-    private static final byte[] royaltiesAmountKey = Helper.toByteArray((byte) 13);
-    private static final byte[] currentPriceKey = Helper.toByteArray((byte) 14);
+    private static final byte[] currentPriceKey = Helper.toByteArray((byte) 12);
 
     // STORAGE MAPS
     private static final StorageMap tokens = new StorageMap(ctx, Helper.toByteArray((byte) 101));
@@ -121,25 +115,9 @@ public class LollipopNFT {
         return new Hash160(Storage.get(ctx.asReadOnly(), ownerKey));
     }
 
-    /**
-     * Required by NFT marketplaces that support royalties.
-     * 
-     * @return royalties data with receiverAddress and royaltiesAmount.
-     */
-    @Safe
-    public static String getRoyalties() {
-        String receiverAddress = Storage.getString(ctx.asReadOnly(), royaltiesReceiverKey);
-        int amount = Storage.getInt(ctx.asReadOnly(), royaltiesAmountKey);
-        Map<String, Object> map = new Map<>();
-        map.put(ROYALTIES_ADDRESS, receiverAddress);
-        map.put(ROYALTIES_VALUE, StdLib.jsonSerialize(amount));
-        Object[] arr = new Object[] { map };
-        return StdLib.jsonSerialize(arr);
-    }
-
     @Safe
     public static String symbol() {
-        return "POP";
+        return "LOLLI";
     }
 
     @Safe
@@ -441,18 +419,6 @@ public class LollipopNFT {
             Storage.put(ctx, imageBaseUriKey, imageBaseURI);
             Storage.put(ctx, maxSupplyKey, 222);
             Storage.put(ctx, isPausedKey, 1);
-
-            String royaltiesReceiverAddress = (String) arr[3];
-            if (royaltiesReceiverAddress.length() == 0) {
-                throw new Exception("deploy_royaltiesReceiverAddress ");
-            }
-            Storage.put(ctx, royaltiesReceiverKey, royaltiesReceiverAddress);
-
-            int royaltiesAmount = (int) arr[4];
-            if (royaltiesAmount <= 0) {
-                throw new Exception("deploy_royaltiesAmount");
-            }
-            Storage.put(ctx, royaltiesAmountKey, royaltiesAmount);
 
             for (int i = 0; i < 22; i++) {
                 mint(contractOwner());
