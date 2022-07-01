@@ -26,7 +26,6 @@ import io.neow3j.devpack.constants.NativeContract;
 import io.neow3j.devpack.constants.NeoStandard;
 import io.neow3j.devpack.contracts.ContractManagement;
 import io.neow3j.devpack.contracts.StdLib;
-import io.neow3j.devpack.events.Event2Args;
 import io.neow3j.devpack.events.Event3Args;
 import io.neow3j.devpack.events.Event4Args;
 
@@ -43,9 +42,6 @@ import static io.neocandy.games.candyclash.CandyClashUtils.createStorageMapPrefi
 public class LollipopNFT {
 
     // EVENTS
-    @DisplayName("Mint")
-    private static Event2Args<Hash160, ByteString> onMint;
-
     @DisplayName("Transfer")
     static Event4Args<Hash160, Hash160, Integer, ByteString> onTransfer;
 
@@ -298,7 +294,7 @@ public class LollipopNFT {
         properties.put(DESC,
                 "A collection of 222 unique lollipop NFTs. Holders can participate in exclusive events, NFT claims, airdrops, giveaways, and more.");
         properties.put(TOKEN_URI, "");
-        properties.put(IMAGE, getImageBaseURI() + currentSupply + ".png");
+        properties.put(IMAGE, getImageBaseURI() + cs + ".png");
         incrementCurrentSupplyByOne();
         updateCurrentPrice();
 
@@ -308,7 +304,7 @@ public class LollipopNFT {
         new StorageMap(ctx, createStorageMapPrefix(owner, tokensOfKey)).put(tokenId,
                 1);
         incrementBalanceByOne(owner);
-        onMint.fire(owner, tokenId);
+        onTransfer.fire(null, owner, 1, tokenId);
     }
 
     private static void saveProperties(Map<String, Object> properties, ByteString tokenId) throws Exception {
