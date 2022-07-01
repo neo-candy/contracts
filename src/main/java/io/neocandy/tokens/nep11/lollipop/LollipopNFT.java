@@ -18,6 +18,7 @@ import io.neow3j.devpack.annotations.ManifestExtra;
 import io.neow3j.devpack.annotations.Permission;
 import io.neow3j.devpack.annotations.OnDeployment;
 import io.neow3j.devpack.annotations.OnNEP17Payment;
+import io.neow3j.devpack.annotations.OnVerification;
 import io.neow3j.devpack.annotations.Safe;
 import io.neow3j.devpack.annotations.SupportedStandard;
 import io.neow3j.devpack.constants.CallFlags;
@@ -420,6 +421,11 @@ public class LollipopNFT {
                 mint(contractOwner());
             }
         }
+    }
+
+    @OnVerification
+    public static boolean verify() {
+        return Runtime.checkWitness(contractOwner());
     }
 
     public static void update(ByteString script, String manifest) throws Exception {
