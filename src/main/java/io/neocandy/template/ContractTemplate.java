@@ -6,20 +6,32 @@ import io.neow3j.devpack.Helper;
 import io.neow3j.devpack.Runtime;
 import io.neow3j.devpack.Storage;
 import io.neow3j.devpack.StorageContext;
+import io.neow3j.devpack.annotations.ContractSourceCode;
 import io.neow3j.devpack.annotations.DisplayName;
+import io.neow3j.devpack.annotations.ManifestExtra;
 import io.neow3j.devpack.annotations.OnDeployment;
 import io.neow3j.devpack.annotations.OnNEP17Payment;
 import io.neow3j.devpack.annotations.Permission;
 import io.neow3j.devpack.annotations.Safe;
-import io.neow3j.devpack.constants.NativeContract;
 import io.neow3j.devpack.contracts.ContractManagement;
+import io.neow3j.devpack.events.Event2Args;
 import io.neow3j.devpack.events.Event3Args;
 
-@Permission(nativeContract = NativeContract.ContractManagement)
+@ManifestExtra(key = "Author", value = "")
+@ManifestExtra(key = "Description", value = "")
+@ManifestExtra(key = "Email", value = "")
+@ManifestExtra(key = "Website", value = "")
+@Permission(contract = "*", methods = "*")
+@ContractSourceCode("")
+@DisplayName("")
+@SuppressWarnings("unchecked")
 public class ContractTemplate {
 
     @DisplayName("Payment")
     static Event3Args<Hash160, Integer, Object> onPayment;
+
+    @DisplayName("Error")
+    static Event2Args<String, String> error;
 
     private static final StorageContext ctx = Storage.getStorageContext();
 
@@ -35,7 +47,13 @@ public class ContractTemplate {
 
     @Safe
     public static Hash160 owner() {
-        return new Hash160(Storage.get(ctx, ownerKey));
+        return new Hash160(Storage.get(ctx.asReadOnly(), ownerKey));
+    }
+
+    /* UTIL */
+    private static void fireErrorAndAbort(String msg, String method) {
+        error.fire(msg, method);
+        Helper.abort();
     }
 
     /* PERMISSION CHECKS */

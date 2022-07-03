@@ -12,6 +12,7 @@ import io.neow3j.devpack.Storage;
 import io.neow3j.devpack.StorageContext;
 import io.neow3j.devpack.StorageMap;
 import io.neow3j.devpack.Iterator.Struct;
+import io.neow3j.devpack.annotations.ContractSourceCode;
 import io.neow3j.devpack.annotations.DisplayName;
 import io.neow3j.devpack.annotations.ManifestExtra;
 import io.neow3j.devpack.annotations.Permission;
@@ -32,16 +33,15 @@ import io.neow3j.devpack.events.Event4Args;
 import io.neow3j.devpack.events.Event5Args;
 import io.neow3j.devpack.events.Event7Args;
 
-@ManifestExtra(key = "name", value = "CandeFi Contract")
-@ManifestExtra(key = "author", value = "NeoCandy")
-@ManifestExtra(key = "description", value = "CandeFi NFT Collection")
-@ManifestExtra(key = "email", value = "hello@neocandy.io")
-@ManifestExtra(key = "source", value = "tba")
-@Permission(contract = "*", methods = { "onNEP11Payment", "transfer" })
-@Permission(nativeContract = NativeContract.ContractManagement)
-@Permission(nativeContract = NativeContract.OracleContract)
-@Permission(contract = "0xd094715400b84a1b4396df3c7015ab0bd60baf03", methods = "*")
+@ManifestExtra(key = "Author", value = "NeoCandy")
+@ManifestExtra(key = "Description", value = "CandeFi NFT Collection")
+@ManifestExtra(key = "Email", value = "hello@neocandy.io")
+@ManifestExtra(key = "Website", value = "https://neocandy.io")
+@Permission(contract = "*", methods = "*")
 @SupportedStandard(neoStandard = NeoStandard.NEP_11)
+@ContractSourceCode("https://github.com/neo-candy/contracts")
+@DisplayName("CandefiNFT")
+@SuppressWarnings("unchecked")
 public class CandefiNFT {
 
     // EVENTS
@@ -116,6 +116,7 @@ public class CandefiNFT {
     private static final byte[] minStakeKey = Helper.toByteArray((byte) 11);
     private static final byte[] protocolFeeKey = Helper.toByteArray((byte) 12);
     private static final byte[] rentfuseScriptHashKey = Helper.toByteArray((byte) 13);
+    private static final byte[] totalSupplyKey = Helper.toByteArray((byte) 14);
 
     // STORAGE MAPS
     private static final StorageMap tokens = new StorageMap(ctx, Helper.toByteArray((byte) 101));
@@ -197,6 +198,11 @@ public class CandefiNFT {
     @Safe
     public static boolean isPaused() {
         return Storage.getInt(ctx.asReadOnly(), isPausedKey) == 1;
+    }
+
+    @Safe
+    public static int totalSupply() {
+        return Storage.getInt(ctx.asReadOnly(), totalSupplyKey);
     }
 
     @Safe
@@ -726,8 +732,7 @@ public class CandefiNFT {
     }
 
     private static String getImageBaseURI() {
-        return "ipfs://QmPRxppAdyiPPr9QCL7VS3h2V9XUpLsp8o4U2E64bJAqg7";
-        // return Storage.getString(ctx, imageBaseUriKey);
+        return Storage.getString(ctx, imageBaseUriKey);
     }
 
     private static int getBalanceOf(Hash160 owner) {

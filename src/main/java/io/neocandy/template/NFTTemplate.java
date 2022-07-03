@@ -12,7 +12,9 @@ import io.neow3j.devpack.Storage;
 import io.neow3j.devpack.StorageContext;
 import io.neow3j.devpack.StorageMap;
 import io.neow3j.devpack.Iterator.Struct;
+import io.neow3j.devpack.annotations.ContractSourceCode;
 import io.neow3j.devpack.annotations.DisplayName;
+import io.neow3j.devpack.annotations.ManifestExtra;
 import io.neow3j.devpack.annotations.Permission;
 import io.neow3j.devpack.annotations.OnDeployment;
 import io.neow3j.devpack.annotations.OnNEP17Payment;
@@ -20,18 +22,24 @@ import io.neow3j.devpack.annotations.Safe;
 import io.neow3j.devpack.annotations.SupportedStandard;
 import io.neow3j.devpack.constants.CallFlags;
 import io.neow3j.devpack.constants.FindOptions;
-import io.neow3j.devpack.constants.NativeContract;
 import io.neow3j.devpack.constants.NeoStandard;
 import io.neow3j.devpack.contracts.ContractManagement;
 import io.neow3j.devpack.contracts.StdLib;
+import io.neow3j.devpack.events.Event2Args;
 import io.neow3j.devpack.events.Event3Args;
 import io.neow3j.devpack.events.Event4Args;
 
 import static io.neocandy.games.candyclash.CandyClashUtils.createStorageMapPrefix;
 
-@Permission(contract = "*", methods = { "onNEP11Payment", "transfer" })
-@Permission(nativeContract = NativeContract.ContractManagement)
+@Permission(contract = "*", methods = "*")
 @SupportedStandard(neoStandard = NeoStandard.NEP_11)
+@ManifestExtra(key = "Author", value = "")
+@ManifestExtra(key = "Description", value = "")
+@ManifestExtra(key = "Email", value = "")
+@ManifestExtra(key = "Website", value = "")
+@ContractSourceCode("")
+@DisplayName("")
+@SuppressWarnings("unchecked")
 public class NFTTemplate {
 
     // EVENTS
@@ -41,6 +49,9 @@ public class NFTTemplate {
 
     @DisplayName("Payment")
     static Event3Args<Hash160, Integer, Object> onPayment;
+
+    @DisplayName("Error")
+    static Event2Args<String, String> error;
 
     // DEFAULT METADATA
     private static final String NAME = "name";
@@ -240,6 +251,11 @@ public class NFTTemplate {
         new StorageMap(ctx, createStorageMapPrefix(owner, tokensOfKey)).put(tokenId, 1);
         incrementBalanceByOne(owner);
         onTransfer.fire(null, owner, 1, tokenId);
+    }
+
+    private static void fireErrorAndAbort(String msg, String method) {
+        error.fire(msg, method);
+        Helper.abort();
     }
 
     private static void saveProperties(Map<String, Object> properties, ByteString tokenId) throws Exception {
