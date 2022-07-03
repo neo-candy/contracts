@@ -222,7 +222,7 @@ public class NFTTemplate {
 
     /* UTIL */
 
-    private static void mint(Hash160 owner, int gen) throws Exception {
+    public static void mint(Hash160 owner) throws Exception {
         int currentSupply = currentSupply();
         String cs = StdLib.itoa(++currentSupply, 10);
         ByteString tokenId = new ByteString(cs);
@@ -230,7 +230,8 @@ public class NFTTemplate {
         properties.put(TOKEN_ID, cs);
         properties.put(DESC, "Description Placeholder");
         properties.put(TOKEN_URI, "");
-        properties.put(IMAGE, getImageBaseURI() + currentSupply + ".png");
+        properties.put(NAME, "");
+        properties.put(IMAGE, getImageBaseURI() + cs + ".png");
 
         incrementCurrentSupplyByOne();
         saveProperties(properties, tokenId);
@@ -296,7 +297,7 @@ public class NFTTemplate {
     }
 
     private static void incrementCurrentSupplyByOne() {
-        int updatedCurrentSupply = Storage.getInt(ctx.asReadOnly(), currentSupplyKey) + 1;
+        int updatedCurrentSupply = currentSupply() + 1;
         Storage.put(ctx, currentSupplyKey, updatedCurrentSupply);
     }
 
@@ -341,17 +342,17 @@ public class NFTTemplate {
             }
             Storage.put(ctx, ownerkey, owner);
 
-            String imageBaseURI = (String) arr[3];
+            String imageBaseURI = (String) arr[1];
             if (imageBaseURI.length() == 0) {
                 throw new Exception("deploy_invalidImageBaseURI");
             }
             Storage.put(ctx, imageBaseUriKey, imageBaseURI);
 
-            int maxSupply = (int) arr[4];
-            if (maxSupply < 1) {
-                throw new Exception("deploy_maxSupply");
+            int totalSupply = (int) arr[2];
+            if (totalSupply < 1) {
+                throw new Exception("deploy_totalSupply");
             }
-            Storage.put(ctx, totalSupplyKey, maxSupply);
+            Storage.put(ctx, totalSupplyKey, totalSupply);
             Storage.put(ctx, isPausedKey, 1);
         }
     }
