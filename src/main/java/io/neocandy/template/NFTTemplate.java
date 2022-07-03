@@ -60,12 +60,6 @@ public class NFTTemplate {
     private static final String TOKEN_URI = "tokenURI";
     private static final String TOKEN_ID = "tokenId";
 
-    // GM related properties
-    private static final String PROPERTIES = "properties";
-    private static final String PROPERTY_HAS_LOCKED = "has_locked";
-    private static final String PROPERTY_TYPE = "type";
-    private static final int PROPERTY_GAME_TYPE = 4;
-
     // NFT attributes
     private static final String ATTRIBUTES = "attributes";
     private static final String ATTRIBUTE_TRAIT_TYPE = "trait_type";
@@ -155,7 +149,7 @@ public class NFTTemplate {
                 ctx.asReadOnly(),
                 createStorageMapPrefix(owner, tokensOfKey),
                 FindOptions.RemovePrefix);
-        List<String> tokens = new List();
+        List<String> tokens = new List<>();
         while (iterator.next()) {
             ByteString result = (ByteString) iterator.get().key;
             tokens.add(propertiesJson(result));
@@ -191,11 +185,6 @@ public class NFTTemplate {
         p.put(DESC, tokenProps.description);
         p.put(IMAGE, tokenProps.image);
         p.put(TOKEN_URI, tokenProps.tokenUri);
-
-        Map<String, Object> properties = new Map<>();
-        properties.put(PROPERTY_HAS_LOCKED, false);
-        properties.put(PROPERTY_TYPE, PROPERTY_GAME_TYPE);
-        p.put(PROPERTIES, properties);
 
         List<Map<String, Object>> attributes = new List<>();
         p.put(ATTRIBUTES, attributes);

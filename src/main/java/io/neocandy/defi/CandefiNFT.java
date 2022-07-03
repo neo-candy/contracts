@@ -22,12 +22,12 @@ import io.neow3j.devpack.annotations.Safe;
 import io.neow3j.devpack.annotations.SupportedStandard;
 import io.neow3j.devpack.constants.CallFlags;
 import io.neow3j.devpack.constants.FindOptions;
-import io.neow3j.devpack.constants.NativeContract;
 import io.neow3j.devpack.constants.NeoStandard;
 import io.neow3j.devpack.contracts.ContractManagement;
 import io.neow3j.devpack.contracts.GasToken;
 import io.neow3j.devpack.contracts.OracleContract;
 import io.neow3j.devpack.contracts.StdLib;
+import io.neow3j.devpack.events.Event1Arg;
 import io.neow3j.devpack.events.Event3Args;
 import io.neow3j.devpack.events.Event4Args;
 import io.neow3j.devpack.events.Event5Args;
@@ -52,10 +52,10 @@ public class CandefiNFT {
     @DisplayName("Payment")
     private static Event3Args<Hash160, Integer, Object> onPayment;
 
-    @DisplayName("OptionMinted")
-    private static Event7Args<Hash160, ByteString, Integer, Integer, Integer, Integer, Integer> onOptionMinted;
+    @DisplayName("Mint")
+    private static Event7Args<Hash160, ByteString, Integer, Integer, Integer, Integer, Integer> onMint;
 
-    @DisplayName("Exercised")
+    @DisplayName("Exercise")
     private static Event5Args<Hash160, ByteString, Integer, Integer, Integer> onExercise;
 
     @DisplayName("Burn")
@@ -63,6 +63,9 @@ public class CandefiNFT {
 
     @DisplayName("Debug")
     private static Event4Args<Object, Object, Object, Object> onDebug;
+
+    @DisplayName("Error")
+    private static Event1Arg<String> onError;
 
     // DEFAULT METADATA
     private static final String NAME = "name";
@@ -77,13 +80,13 @@ public class CandefiNFT {
     private static final String TYPE = "Type";
     private static final String WRITER = "Writer";
     private static final String OWNER = "Owner";
-    private static final String VDOT = "Vdot";
+    private static final String DEPRECIATION = "Depreciation";
+    private static final String VOLATILITY = "Volatility";
     private static final String CREATED = "Created";
     private static final String EXERCISED = "Exercised";
-    private static final String REAL_VALUE = "Real Value";
-    private static final String START_VALUE = "Start Value";
-    private static final String VI = "Vi";
+    private static final String VALUE = "Value";
     private static final String SAFE = "Safe";
+    private static final String RENTING_START = "Renting Start";
 
     // CUSTOM METADATA VALUES
     private static final int TYPE_CALL = 1;
@@ -105,18 +108,18 @@ public class CandefiNFT {
     private static int ORACLE_SUCCESS_RESPONSE_CODE = 0;
 
     // STORAGE KEYS
-    private static final byte[] ownerkey = Helper.toByteArray((byte) 1);
-    private static final byte[] candyContractHashKey = Helper.toByteArray((byte) 2);
-    private static final byte[] tokensOfKey = Helper.toByteArray((byte) 3);
-    private static final byte[] imageBaseUriKey = Helper.toByteArray((byte) 4);
-    private static final byte[] currentSupplyKey = Helper.toByteArray((byte) 5);
-    private static final byte[] isPausedKey = Helper.toByteArray((byte) 6);
-    private static final byte[] oracleEndpointKey = Helper.toByteArray((byte) 9);
-    private static final byte[] writerOfKey = Helper.toByteArray((byte) 10);
-    private static final byte[] minStakeKey = Helper.toByteArray((byte) 11);
-    private static final byte[] protocolFeeKey = Helper.toByteArray((byte) 12);
-    private static final byte[] rentfuseScriptHashKey = Helper.toByteArray((byte) 13);
-    private static final byte[] totalSupplyKey = Helper.toByteArray((byte) 14);
+    private static final byte[] ownerkey = Helper.toByteArray((byte) 5);
+    private static final byte[] candyContractHashKey = Helper.toByteArray((byte) 6);
+    private static final byte[] tokensOfKey = Helper.toByteArray((byte) 7);
+    private static final byte[] imageBaseUriKey = Helper.toByteArray((byte) 8);
+    private static final byte[] currentSupplyKey = Helper.toByteArray((byte) 9);
+    private static final byte[] isPausedKey = Helper.toByteArray((byte) 10);
+    private static final byte[] oracleEndpointKey = Helper.toByteArray((byte) 11);
+    private static final byte[] writerOfKey = Helper.toByteArray((byte) 12);
+    private static final byte[] candyMinStakeKey = Helper.toByteArray((byte) 13);
+    private static final byte[] candyProtocolFeeKey = Helper.toByteArray((byte) 14);
+    private static final byte[] rentfuseScriptHashKey = Helper.toByteArray((byte) 15);
+    private static final byte[] totalSupplyKey = Helper.toByteArray((byte) 16);
 
     // STORAGE MAPS
     private static final StorageMap tokens = new StorageMap(ctx, Helper.toByteArray((byte) 101));
@@ -127,41 +130,45 @@ public class CandefiNFT {
     private static final StorageMap writerOfMap = new StorageMap(ctx, (byte) 106);
     private static final StorageMap exercised = new StorageMap(ctx, (byte) 107);
     private static final StorageMap stakes = new StorageMap(ctx, (byte) 109);
+    private static final StorageMap rentingStartedAt = new StorageMap(ctx, (byte) 110);
 
-    @io.neow3j.devpack.annotations.Struct
-    static class Request {
-        public int type;
-        public int strike;
-        public int vdot; // value decline over time in ms
-        public int value;
-        public int vi;
-        public boolean safe;
-        // Rentfuse properties
-        public int paymentTokenAmount;
-        int minDuration;
-        int maxDuration;
-        int collateral;
+    public static void onNEP11RentingStarted(Hash160 lender, Hash160 borrower, ByteString rentingId, ByteString tokenId,
+            Object[] data) {
+        onlyRentfuse();
+        rentingStartedAt.put(tokenId, Runtime.getTime());
+    }
+
+    public static void onNEP11RentingFinished(Hash160 lender, Hash160 borrower, ByteString rentingId,
+            ByteString tokenId, Object[] data) {
+        onlyRentfuse();
+        // burn(tokenId);
+    }
+
+    public static void onNEP11RentingRevoked(Hash160 lender, Hash160 borrower, ByteString rentingId, ByteString tokenId,
+            Object[] data) {
+        onlyRentfuse();
+        // burn(tokenId);
     }
 
     @OnNEP17Payment
     public static void onPayment(Hash160 from, int amount, Object data) throws Exception {
         if (isPaused()) {
-            throw new Exception("onPayment_isPaused");
+            fireErrorAndAbort("onPayment_isPaused");
         }
         if (amount <= 0) {
-            throw new Exception("onPayment_invalidAmount");
+            fireErrorAndAbort("onPayment_invalidAmount");
         }
         Hash160 token = Runtime.getCallingScriptHash();
 
         if (token != candyContract()) {
-            throw new Exception("onPayment_onlyCandy");
+            fireErrorAndAbort("onPayment_onlyCandy");
         }
         if (data == null) {
-            throw new Exception("onPayment_dataMissing");
+            fireErrorAndAbort("onPayment_dataMissing");
         }
-        Request req = (Request) data;
+        MintRequest req = (MintRequest) data;
         if (amount - protocolFee() < minStake()) {
-            throw new Exception("onPayment_invalidMinStake");
+            fireErrorAndAbort("onPayment_invalidMinStake");
         }
         int stake = amount - protocolFee();
         mint(from, req, stake);
@@ -186,7 +193,10 @@ public class CandefiNFT {
     }
 
     @Safe
-    public static int balanceOf(Hash160 owner) {
+    public static int balanceOf(Hash160 owner) throws Exception {
+        if (!Hash160.isValid(owner)) {
+            throw new Exception("balanceOf_invalidHash");
+        }
         return getBalanceOf(owner);
     }
 
@@ -206,24 +216,33 @@ public class CandefiNFT {
     }
 
     @Safe
-    public static Iterator<ByteString> tokensOf(Hash160 owner) {
+    public static Iterator<ByteString> tokensOf(Hash160 owner) throws Exception {
+        if (!Hash160.isValid(owner)) {
+            throw new Exception("tokensOf_invalidHash");
+        }
         return (Iterator<ByteString>) Storage.find(ctx.asReadOnly(), createStorageMapPrefix(owner, tokensOfKey),
                 (byte) (FindOptions.KeysOnly | FindOptions.RemovePrefix));
     }
 
     @Safe
-    public static Iterator<ByteString> tokensOfWriter(Hash160 owner) {
-        return (Iterator<ByteString>) Storage.find(ctx.asReadOnly(), createStorageMapPrefix(owner, writerOfKey),
+    public static Iterator<ByteString> tokensOfWriter(Hash160 writer) throws Exception {
+        if (!Hash160.isValid(writer)) {
+            throw new Exception("tokensOf_invalidHash");
+        }
+        return (Iterator<ByteString>) Storage.find(ctx.asReadOnly(), createStorageMapPrefix(writer, writerOfKey),
                 (byte) (FindOptions.KeysOnly | FindOptions.RemovePrefix));
     }
 
     @Safe
     public static List<String> tokensOfJson(Hash160 owner) throws Exception {
+        if (!Hash160.isValid(owner)) {
+            throw new Exception("tokensOfJson_invalidHash");
+        }
         Iterator<Struct<ByteString, ByteString>> iterator = (Iterator<Struct<ByteString, ByteString>>) Storage.find(
                 ctx.asReadOnly(),
                 createStorageMapPrefix(owner, tokensOfKey),
                 FindOptions.RemovePrefix);
-        List<String> tokens = new List();
+        List<String> tokens = new List<>();
         while (iterator.next()) {
             ByteString result = (ByteString) iterator.get().key;
             tokens.add(propertiesJson(result));
@@ -232,12 +251,15 @@ public class CandefiNFT {
     }
 
     @Safe
-    public static List<String> tokensOfWriterJson(Hash160 owner) throws Exception {
+    public static List<String> tokensOfWriterJson(Hash160 writer) throws Exception {
+        if (!Hash160.isValid(writer)) {
+            throw new Exception("tokensOfWriterJson_invalidHash");
+        }
         Iterator<Struct<ByteString, ByteString>> iterator = (Iterator<Struct<ByteString, ByteString>>) Storage.find(
                 ctx.asReadOnly(),
-                createStorageMapPrefix(owner, writerOfKey),
+                createStorageMapPrefix(writer, writerOfKey),
                 FindOptions.RemovePrefix);
-        List<String> tokens = new List();
+        List<String> tokens = new List<>();
         while (iterator.next()) {
             ByteString result = (ByteString) iterator.get().key;
             tokens.add(propertiesJson(result));
@@ -246,7 +268,10 @@ public class CandefiNFT {
     }
 
     @Safe
-    public static Hash160 ownerOf(ByteString tokenId) {
+    public static Hash160 ownerOf(ByteString tokenId) throws Exception {
+        if (!isValidTokenId(tokenId)) {
+            throw new Exception("ownerOf_invalidTokenId");
+        }
         ByteString owner = ownerOfMap.get(tokenId);
         if (owner == null) {
             return null;
@@ -255,7 +280,10 @@ public class CandefiNFT {
     }
 
     @Safe
-    public static Hash160 writerOf(ByteString tokenId) {
+    public static Hash160 writerOf(ByteString tokenId) throws Exception {
+        if (!isValidTokenId(tokenId)) {
+            throw new Exception("writerOf_invalidTokenId");
+        }
         ByteString owner = writerOfMap.get(tokenId);
         if (owner == null) {
             return null;
@@ -270,6 +298,9 @@ public class CandefiNFT {
 
     @Safe
     public static Map<String, Object> properties(ByteString tokenId) throws Exception {
+        if (!isValidTokenId(tokenId)) {
+            throw new Exception("properties_invalidTokenId");
+        }
         TokenProperties tokenProps = (TokenProperties) StdLib
                 .deserialize(immutableTokenProperties.get(tokenId));
         Map<String, Object> p = new Map<>();
@@ -277,11 +308,11 @@ public class CandefiNFT {
         if (tokenProps == null) {
             throw new Exception("properties_tokenDoesNotExist");
         }
-        p.put(TOKEN_ID, tokenProps.tokenId);
-        p.put(NAME, tokenProps.name);
-        p.put(DESC, tokenProps.description);
-        p.put(IMAGE, tokenProps.image);
-        p.put(TOKEN_URI, tokenProps.tokenUri);
+        p.put(TOKEN_ID, tokenProps.getTokenId());
+        p.put(NAME, tokenProps.getName());
+        p.put(DESC, tokenProps.getDescription());
+        p.put(IMAGE, tokenProps.getImage());
+        p.put(TOKEN_URI, tokenProps.getTokenUri());
 
         Map<String, Object> properties = new Map<>();
         properties.put(PROPERTY_HAS_LOCKED, false);
@@ -289,19 +320,18 @@ public class CandefiNFT {
         p.put(PROPERTIES, properties);
 
         List<Map<String, Object>> attributes = new List<>();
-        attributes.add(getAttributeMap(TYPE, tokenProps.type));
+        attributes.add(getAttributeMap(TYPE, tokenProps.getType()));
         attributes.add(getAttributeMap(STAKE, stakeOf(tokenId)));
-        attributes.add(getAttributeMap(STRIKE, tokenProps.strike));
-        attributes.add(getAttributeMap(WRITER, tokenProps.writer));
-        attributes.add(getAttributeMap(OWNER, ownerOf(tokenProps.tokenId)));
-        attributes.add(getAttributeMap(VDOT, tokenProps.vdot));
-        attributes.add(getAttributeMap(CREATED, tokenProps.created));
-        attributes.add(getAttributeMap(EXERCISED, exercised(tokenId)));
-        attributes.add(getAttributeMap(REAL_VALUE,
-                determineValue(stakeOf(tokenId), tokenProps, 0)));
-        attributes.add(getAttributeMap(START_VALUE, tokenProps.value));
-        attributes.add(getAttributeMap(VI, tokenProps.vi));
-        attributes.add(getAttributeMap(SAFE, tokenProps.safe));
+        attributes.add(getAttributeMap(STRIKE, tokenProps.getStrike()));
+        attributes.add(getAttributeMap(WRITER, tokenProps.getWriter()));
+        attributes.add(getAttributeMap(OWNER, ownerOf(tokenProps.getTokenId())));
+        attributes.add(getAttributeMap(DEPRECIATION, tokenProps.getDepreciation()));
+        attributes.add(getAttributeMap(CREATED, tokenProps.getCreated()));
+        attributes.add(getAttributeMap(EXERCISED, isExercised(tokenId)));
+        attributes.add(getAttributeMap(VALUE, tokenProps.getValue()));
+        attributes.add(getAttributeMap(VOLATILITY, tokenProps.getVolatility()));
+        attributes.add(getAttributeMap(SAFE, tokenProps.isSafe()));
+        attributes.add(getAttributeMap(RENTING_START, rentingStartedAt.getInt(tokenId)));
 
         p.put(ATTRIBUTES, attributes);
 
@@ -310,18 +340,21 @@ public class CandefiNFT {
 
     @Safe
     public static String propertiesJson(ByteString tokenId) throws Exception {
+        if (!isValidTokenId(tokenId)) {
+            throw new Exception("propertiesJson_invalidTokenId");
+        }
         TokenProperties tokenProps = (TokenProperties) StdLib
                 .deserialize(immutableTokenProperties.get(tokenId));
         Map<String, Object> p = new Map<>();
 
         if (tokenProps == null) {
-            throw new Exception("properties_tokenDoesNotExist");
+            throw new Exception("propertiesJson_tokenDoesNotExist");
         }
-        p.put(TOKEN_ID, tokenProps.tokenId);
-        p.put(NAME, tokenProps.name);
-        p.put(DESC, tokenProps.description);
-        p.put(IMAGE, tokenProps.image);
-        p.put(TOKEN_URI, tokenProps.tokenUri);
+        p.put(TOKEN_ID, tokenProps.getTokenId());
+        p.put(NAME, tokenProps.getName());
+        p.put(DESC, tokenProps.getDescription());
+        p.put(IMAGE, tokenProps.getImage());
+        p.put(TOKEN_URI, tokenProps.getTokenUri());
 
         Map<String, Object> properties = new Map<>();
         properties.put(PROPERTY_HAS_LOCKED, false);
@@ -329,19 +362,18 @@ public class CandefiNFT {
         p.put(PROPERTIES, properties);
 
         List<Map<String, Object>> attributes = new List<>();
-        attributes.add(getAttributeMap(TYPE, tokenProps.type));
+        attributes.add(getAttributeMap(TYPE, tokenProps.getType()));
         attributes.add(getAttributeMap(STAKE, stakeOf(tokenId)));
-        attributes.add(getAttributeMap(STRIKE, tokenProps.strike));
-        attributes.add(getAttributeMap(WRITER, StdLib.base64Encode(tokenProps.writer)));
-        attributes.add(getAttributeMap(OWNER, StdLib.base64Encode(ownerOf(tokenProps.tokenId).toByteString())));
-        attributes.add(getAttributeMap(VDOT, tokenProps.vdot));
-        attributes.add(getAttributeMap(CREATED, tokenProps.created));
-        attributes.add(getAttributeMap(EXERCISED, exercised(tokenId)));
-        attributes.add(getAttributeMap(REAL_VALUE,
-                determineValue(stakeOf(tokenId), tokenProps, 0)));
-        attributes.add(getAttributeMap(START_VALUE, tokenProps.value));
-        attributes.add(getAttributeMap(VI, tokenProps.vi));
-        attributes.add(getAttributeMap(SAFE, tokenProps.safe));
+        attributes.add(getAttributeMap(STRIKE, tokenProps.getStrike()));
+        attributes.add(getAttributeMap(WRITER, StdLib.base64Encode(tokenProps.getWriter())));
+        attributes.add(getAttributeMap(OWNER, StdLib.base64Encode(ownerOf(tokenProps.getTokenId()).toByteString())));
+        attributes.add(getAttributeMap(DEPRECIATION, tokenProps.getDepreciation()));
+        attributes.add(getAttributeMap(CREATED, tokenProps.getCreated()));
+        attributes.add(getAttributeMap(EXERCISED, isExercised(tokenId)));
+        attributes.add(getAttributeMap(VALUE, tokenProps.getValue()));
+        attributes.add(getAttributeMap(VOLATILITY, tokenProps.getVolatility()));
+        attributes.add(getAttributeMap(SAFE, tokenProps.isSafe()));
+        attributes.add(getAttributeMap(RENTING_START, rentingStartedAt.getInt(tokenId)));
 
         p.put(ATTRIBUTES, attributes);
 
@@ -354,13 +386,17 @@ public class CandefiNFT {
     }
 
     @Safe
-    public static int earningsOf(Hash160 account) {
+    public static int earningsOf(Hash160 account) throws Exception {
+        if (!Hash160.isValid(account)) {
+            throw new Exception("earningsOf_invalidHash");
+        }
         return earnings.getIntOrZero(account.toByteArray());
     }
 
-    // TODO: remove and handle this with a backend, block parser, db
+    // TODO: remove this method, because of limitations its better to handle it
+    // off-chain
     @Safe
-    public static String earnings() {
+    public static String earnings() throws Exception {
         List<String> earningList = new List<>();
         Iterator<Struct<ByteString, ByteString>> list = earnings.find(FindOptions.RemovePrefix);
         while (list.next()) {
@@ -374,23 +410,29 @@ public class CandefiNFT {
 
     @Safe
     public static int minStake() {
-        return Storage.getInt(ctx.asReadOnly(), minStakeKey);
+        return Storage.getInt(ctx.asReadOnly(), candyMinStakeKey);
     }
 
     @Safe
     public static int protocolFee() {
-        return Storage.getInt(ctx.asReadOnly(), protocolFeeKey);
+        return Storage.getInt(ctx.asReadOnly(), candyProtocolFeeKey);
     }
 
     @Safe
-    public static boolean exercised(ByteString tokenId) {
+    public static boolean isExercised(ByteString tokenId) throws Exception {
+        if (!isValidTokenId(tokenId)) {
+            throw new Exception("isExercised_invalidTokenId");
+        }
         Boolean result = exercised.getBoolean(tokenId);
         return result != null ? result : false;
     }
 
     @Safe
-    public static int stakeOf(ByteString tokenId) {
-        return stakes.getInt(tokenId);
+    public static int stakeOf(ByteString tokenId) throws Exception {
+        if (!isValidTokenId(tokenId)) {
+            throw new Exception("stakeOf_invalidTokenId");
+        }
+        return stakes.getIntOrZero(tokenId);
     }
 
     @Safe
@@ -400,46 +442,28 @@ public class CandefiNFT {
 
     /* READ & WRITE */
 
-    public static void cancelListing(ByteString tokenId) throws Exception {
-        int listingId = (int) Contract.call(rentfuseContract(), "getListingIdFromNft", CallFlags.ReadOnly,
+    public static void closeListing(ByteString tokenId) throws Exception {
+        if (isPaused()) {
+            fireErrorAndAbort("closeListing_isPaused");
+        }
+        if (!isValidTokenId(tokenId)) {
+            fireErrorAndAbort("closeListing_invalidTokenId");
+        }
+        if (tokens.get(tokenId) == null) {
+            fireErrorAndAbort("closeListing_tokenDoesNotExist");
+        }
+
+        int rentfuseListingId = (int) Contract.call(rentfuseContract(), "getListingIdFromNft", CallFlags.ReadOnly,
                 new Object[] { Runtime.getExecutingScriptHash(), tokenId });
-        Contract.call(rentfuseContract(), "closeListing", CallFlags.All, new Object[] { listingId });
+        if (rentfuseListingId == 0) {
+            fireErrorAndAbort("closeListing_listingNotFound");
+        }
+        Contract.call(rentfuseContract(), "closeListing", CallFlags.All, new Object[] { rentfuseListingId });
         burn(tokenId);
     }
 
-    private static void burn(ByteString tokenId) throws Exception {
-        assert (Runtime.getInvocationCounter() == 1);
-        Hash160 owner = ownerOf(tokenId);
-        Hash160 writer = writerOf(tokenId);
-
-        if (owner != writer) {
-            throw new Exception("burn_ownerNotWriter");
-        }
-
-        if (!Runtime.checkWitness(owner)) {
-            throw new Exception("burn_noAuth");
-        }
-
-        ownerOfMap.delete(tokenId);
-        writerOfMap.delete(tokenId);
-        new StorageMap(ctx, createStorageMapPrefix(owner, tokensOfKey)).delete(tokenId);
-        new StorageMap(ctx, createStorageMapPrefix(owner, writerOfKey)).delete(tokenId);
-        immutableTokenProperties.delete(tokenId);
-        tokens.delete(tokenId);
-        int transferAmount = stakeOf(tokenId);
-        safeTransfer(Runtime.getExecutingScriptHash(), candyContract(), writer,
-                transferAmount);
-        if (exercised(tokenId)) {
-            increaseEarnings(owner, transferAmount);
-        }
-        exercised.delete(tokenId);
-        stakes.delete(tokenId);
-        onBurn.fire(writer, tokenId, transferAmount);
-
-    }
-
     public static boolean transfer(Hash160 to, ByteString tokenId, Object data) throws Exception {
-        if (!Hash160.isValid(to)) {
+        if (!Hash160.isValid(to) || Hash160.zero() == to) {
             throw new Exception("transfer_invalidHash");
         }
         if (tokenId.length() > 64) {
@@ -466,61 +490,62 @@ public class CandefiNFT {
     }
 
     public static void exercise(ByteString tokenId) throws Exception {
+        if (!isValidTokenId(tokenId)) {
+            fireErrorAndAbort("exercise_invalidTokenId");
+        }
+        if (tokens.get(tokenId) == null) {
+            fireErrorAndAbort("exercise_tokenDoesNotExist");
+        }
         Hash160 owner = new Hash160(ownerOfMap.get(tokenId));
         Hash160 writer = new Hash160(writerOfMap.get(tokenId));
         if (writer == owner) {
-            throw new Exception("exercise_writerCantExercise");
+            fireErrorAndAbort("exercise_writerCantExercise");
         }
         if (!Runtime.checkWitness(owner)) {
-            throw new Exception("exercise_noAuth");
+            fireErrorAndAbort("exercise_noAuth");
         }
-        if (exercised(tokenId)) {
-            throw new Exception("exercise_alreadyExercised");
-        }
-        ByteString properties = immutableTokenProperties.get(tokenId);
-        if (properties == null) {
-            throw new Exception("exercise_tokenDoesNotExist");
+        if (isExercised(tokenId)) {
+            fireErrorAndAbort("exercise_isExercised");
         }
         oracle("oracleResponse", tokenId);
     }
 
     public static void oracleResponse(String url, Object userData, int responseCode, ByteString response)
             throws Exception {
-
         assert (Runtime.getInvocationCounter() == 1);
         if (responseCode != ORACLE_SUCCESS_RESPONSE_CODE) {
-            throw new Exception("oracleExercise_noSuccessResponse");
+            fireErrorAndAbort("oracleResponse_noSuccessResponse");
         }
         if (Runtime.getCallingScriptHash() != OracleContract.getHash()) {
-            throw new Exception("exerciseCall_onlyOracle");
+            fireErrorAndAbort("oracleResponse_onlyOracle");
         }
         ByteString tokenId = (ByteString) userData;
-        if (exercised(tokenId)) {
-            throw new Exception("oracleExercise_alreadyExercised");
+
+        if (isExercised(tokenId)) {
+            fireErrorAndAbort("oracleResponse_alreadyExercised");
         }
         TokenProperties properties = (TokenProperties) StdLib.deserialize(immutableTokenProperties.get(tokenId));
         if (properties == null) {
-            throw new Exception("oracleExercise_tokenDoesNotExist");
+            fireErrorAndAbort("oracleResponse_tokenDoesNotExist");
         }
         Map<String, Object> result = (Map<String, Object>) StdLib
                 .jsonDeserialize(response.toString());
 
         int oraclePrice = decimalStringToInt((String) result.get("price"));
-        if (!canExercise(oraclePrice, properties.strike, properties.type,
-                properties.safe)) {
-            throw new Exception("oracleExercise_cantExercise");
+        if (!canExercise(oraclePrice, properties.getStrike(), properties.getType(),
+                properties.isSafe())) {
+            fireErrorAndAbort("oracleResponse_cantExercise");
         }
         int stake = stakeOf(tokenId);
         Hash160 owner = new Hash160(ownerOfMap.get(tokenId));
-
-        int transferAmount = determineValue(stake, properties, oraclePrice);
+        int rentingStarted = rentingStartedAt.getInt(tokenId);
+        int transferAmount = determineValue(stake, properties, oraclePrice, rentingStarted);
         if (transferAmount <= 0) {
-            throw new Exception("oracleExercise_zeroValue");
+            fireErrorAndAbort("oracleResponse_zeroValue");
         }
         if (stake - transferAmount < 0) {
-            throw new Exception("oracleExercise_stakeValueMismatch");
+            fireErrorAndAbort("oracleResponse_stakeValueMismatch");
         }
-
         exercised.put(tokenId, 1);
         stakes.put(tokenId, stake - transferAmount);
 
@@ -529,33 +554,72 @@ public class CandefiNFT {
 
         increaseEarnings(owner, transferAmount);
 
-        onExercise.fire(owner, tokenId, properties.type, transferAmount,
-                properties.strike);
-
+        onExercise.fire(owner, tokenId, properties.getType(), transferAmount,
+                properties.getStrike());
     }
 
     /* UTIL */
 
-    private static void listOnRentfuse(ByteString tokenId, Request data) throws Exception {
-        onDebug.fire(data.paymentTokenAmount, data.minDuration, data.maxDuration, data.collateral);
-        Object[] listingData = new Object[] { 1, GasToken.getHash(),
-                data.paymentTokenAmount,
-                data.minDuration, data.maxDuration, data.collateral, false, 0 };
-        boolean result = transfer(rentfuseContract(), tokenId, listingData);
-        if (!result) {
-            throw new Exception("listOnRentfuse_nep11TransferFail");
+    private static void burn(ByteString tokenId) throws Exception {
+        assert (Runtime.getInvocationCounter() == 1);
+        Hash160 owner = ownerOf(tokenId);
+        Hash160 writer = writerOf(tokenId);
+
+        if (owner != writer) {
+            fireErrorAndAbort("burn_ownerNotWriter");
         }
 
+        if (!Runtime.checkWitness(owner)) {
+            fireErrorAndAbort("burn_noAuth");
+        }
+
+        ownerOfMap.delete(tokenId);
+        writerOfMap.delete(tokenId);
+        new StorageMap(ctx, createStorageMapPrefix(owner, tokensOfKey)).delete(tokenId);
+        new StorageMap(ctx, createStorageMapPrefix(owner, writerOfKey)).delete(tokenId);
+        immutableTokenProperties.delete(tokenId);
+        tokens.delete(tokenId);
+        int transferAmount = stakeOf(tokenId);
+        safeTransfer(Runtime.getExecutingScriptHash(), candyContract(), writer,
+                transferAmount);
+        if (isExercised(tokenId)) {
+            increaseEarnings(owner, transferAmount);
+        }
+        exercised.delete(tokenId);
+        stakes.delete(tokenId);
+        onBurn.fire(writer, tokenId, transferAmount);
+        onTransfer.fire(writer, null, 1, tokenId);
+    }
+
+    private static boolean isValidTokenId(ByteString tokenId) {
+        return tokenId.length() < 65;
+    }
+
+    private static void listOnRentfuse(ByteString tokenId, MintRequest data) throws Exception {
+        onDebug.fire(data.paymentTokenAmount, data.minDurationInMinutes, data.maxDurationInMinutes, data.collateral);
+        Object[] listingData = new Object[] { 1, GasToken.getHash(),
+                data.paymentTokenAmount,
+                data.minDurationInMinutes, data.maxDurationInMinutes, data.collateral, false, 0 };
+        boolean result = transfer(rentfuseContract(), tokenId, listingData);
+        if (!result) {
+            fireErrorAndAbort("listOnRentfuse_nep11TransferFail");
+        }
     }
 
     private static boolean canExercise(int oraclePrice, int strike, int type, boolean safe) {
+        if (oraclePrice <= 0) {
+            fireErrorAndAbort("canExercise_invalidOraclePrice");
+        }
         return !safe || type == TYPE_CALL && oraclePrice > strike || type == TYPE_PUT && oraclePrice < strike;
     }
 
-    private static int determineValue(int stake, TokenProperties props, int oraclePrice) {
-        int timeDelta = Runtime.getTime() - props.created;
-        int priceDelta = oraclePrice != 0 ? oraclePrice - props.strike : 0;
-        int result = props.value - (props.vdot * timeDelta) + (priceDelta * props.vi);
+    private static int determineValue(int stake, TokenProperties props, int oraclePrice, int rentingStarted) {
+        if (stake <= 0 || oraclePrice <= 0 || rentingStarted <= 0) {
+            fireErrorAndAbort("determineValue_invalidValues");
+        }
+        int timeDelta = Runtime.getTime() - rentingStarted;
+        int priceDelta = oraclePrice != 0 ? oraclePrice - props.getStrike() : 0;
+        int result = props.getValue() - (props.getDepreciation() * timeDelta) + (priceDelta * props.getVolatility());
         return result < 0 ? 0 : (result > stake) ? stake : result;
     }
 
@@ -563,24 +627,24 @@ public class CandefiNFT {
         return Helper.concat(prefix, owner.toByteArray());
     }
 
-    private static void mint(Hash160 writer, Request data, int stake) throws Exception {
+    private static void mint(Hash160 writer, MintRequest data, int stake) throws Exception {
         if (data.strike <= 0) {
-            throw new Exception("mint_invalidStrike");
+            fireErrorAndAbort("mint_invalidStrike");
         }
         if (stake <= 0) {
-            throw new Exception("mint_invalidStake");
+            fireErrorAndAbort("mint_invalidStake");
         }
-        if (data.vdot < 0) {
-            throw new Exception("mint_invalidVdot");
+        if (data.depreciation < 0) {
+            fireErrorAndAbort("mint_invalidVdot");
         }
         if (data.type != TYPE_CALL && data.type != TYPE_PUT) {
-            throw new Exception("mint_invalidType");
+            fireErrorAndAbort("mint_invalidType");
         }
         if (data.value < 0 || data.value > stake) {
-            throw new Exception("mint_invalidValue");
+            fireErrorAndAbort("mint_invalidValue");
         }
-        if (data.vi < 0) {
-            throw new Exception("mint_invalidVi");
+        if (data.volatility < 0) {
+            fireErrorAndAbort("mint_invalidVi");
         }
 
         // TODO: check rentfuse values?
@@ -589,21 +653,21 @@ public class CandefiNFT {
         Map<String, Object> properties = new Map<>();
         properties.put(TOKEN_ID, tokenId);
         if (data.type == TYPE_CALL) {
-            properties.put(NAME, "Candefi Call NFT");
+            properties.put(NAME, "Candefi Call");
         } else {
-            properties.put(NAME, "Candefi Put NFT");
+            properties.put(NAME, "Candefi Put");
         }
         properties.put(DESC, "Candefi NFT collection");
         properties.put(TOKEN_URI, "");
         properties.put(IMAGE, getImageBaseURI());
         properties.put(STAKE, stake);
-        properties.put(REAL_VALUE, data.value);
+        properties.put(VALUE, data.value);
         properties.put(STRIKE, data.strike);
         properties.put(TYPE, data.type);
         properties.put(WRITER, writer.toByteString());
-        properties.put(VDOT, data.vdot);
+        properties.put(DEPRECIATION, data.depreciation);
         properties.put(CREATED, Runtime.getTime());
-        properties.put(VI, data.vi);
+        properties.put(VOLATILITY, data.volatility);
         properties.put(SAFE, data.safe);
 
         incrementCurrentSupplyByOne();
@@ -615,19 +679,23 @@ public class CandefiNFT {
         new StorageMap(ctx, createStorageMapPrefix(writer, writerOfKey)).put(tokenId, 1);
         incrementBalanceByOne(writer);
         listOnRentfuse(tokenId, data);
-        onOptionMinted.fire(writer, tokenId, data.strike, stake, data.vdot, data.type, data.vi);
+        onMint.fire(writer, tokenId, data.strike, stake, data.depreciation, data.type, data.volatility);
+        onTransfer.fire(null, writer, 1, tokenId);
     }
 
-    private static void increaseEarnings(Hash160 account, int amount) {
+    private static void increaseEarnings(Hash160 account, int amount) throws Exception {
+        if (amount <= 0) {
+            fireErrorAndAbort("increaseEarnings_invalidAmount");
+        }
         int earned = earningsOf(account);
-        earnings.put(account.toByteArray(), amount + earned);
+        earnings.put(account.toByteArray(), earned + amount);
     }
 
-    private static void safeTransfer(Hash160 from, Hash160 token, Hash160 to, int amount) throws Exception {
+    private static void safeTransfer(Hash160 from, Hash160 token, Hash160 to, int amount) {
         boolean result = (boolean) Contract.call(token, "transfer", CallFlags.All,
                 new Object[] { from, to, amount, null });
         if (!result) {
-            throw new Exception("safeTransfer_transferFail");
+            fireErrorAndAbort("safeTransfer_transferFail");
         }
     }
 
@@ -653,46 +721,46 @@ public class CandefiNFT {
         return result != null ? new Hash160(result) : null;
     }
 
-    private static void saveProperties(Map<String, Object> properties, ByteString tokenId) throws Exception {
+    private static void saveProperties(Map<String, Object> properties, ByteString tokenId) {
 
         if (!properties.containsKey(NAME)) {
-            throw new Exception("saveProperties_missingName");
+            fireErrorAndAbort("saveProperties_missingName");
         }
         if (!properties.containsKey(DESC)) {
-            throw new Exception("saveProperties_missingDescription");
+            fireErrorAndAbort("saveProperties_missingDescription");
         }
         if (!properties.containsKey(IMAGE)) {
-            throw new Exception("saveProperties_missingImage");
+            fireErrorAndAbort("saveProperties_missingImage");
         }
         if (!properties.containsKey(TOKEN_URI)) {
-            throw new Exception("saveProperties_missingTokenUri");
+            fireErrorAndAbort("saveProperties_missingTokenUri");
         }
         if (!properties.containsKey(STRIKE)) {
-            throw new Exception("saveProperties_missingStrike");
+            fireErrorAndAbort("saveProperties_missingStrike");
         }
         if (!properties.containsKey(STAKE)) {
-            throw new Exception("saveProperties_missingStake");
+            fireErrorAndAbort("saveProperties_missingStake");
         }
         if (!properties.containsKey(TYPE)) {
-            throw new Exception("saveProperties_missingType");
+            fireErrorAndAbort("saveProperties_missingType");
         }
         if (!properties.containsKey(WRITER)) {
-            throw new Exception("saveProperties_missingWriter");
+            fireErrorAndAbort("saveProperties_missingWriter");
         }
-        if (!properties.containsKey(VDOT)) {
-            throw new Exception("saveProperties_missingVdot");
+        if (!properties.containsKey(DEPRECIATION)) {
+            fireErrorAndAbort("saveProperties_missingVdot");
         }
         if (!properties.containsKey(CREATED)) {
-            throw new Exception("saveProperties_missingCreated");
+            fireErrorAndAbort("saveProperties_missingCreated");
         }
-        if (!properties.containsKey(REAL_VALUE)) {
-            throw new Exception("saveProperties_missingValue");
+        if (!properties.containsKey(VALUE)) {
+            fireErrorAndAbort("saveProperties_missingValue");
         }
-        if (!properties.containsKey(VI)) {
-            throw new Exception("saveProperties_missingVi");
+        if (!properties.containsKey(VOLATILITY)) {
+            fireErrorAndAbort("saveProperties_missingVi");
         }
         if (!properties.containsKey(SAFE)) {
-            throw new Exception("saveProperties_missingSafe");
+            fireErrorAndAbort("saveProperties_missingSafe");
         }
 
         String name = (String) properties.get(NAME);
@@ -702,11 +770,11 @@ public class CandefiNFT {
         int strike = (int) properties.get(STRIKE);
         int stake = (int) properties.get(STAKE);
         int type = (int) properties.get(TYPE);
-        int vdot = (int) properties.get(VDOT);
+        int vdot = (int) properties.get(DEPRECIATION);
         int created = (int) properties.get(CREATED);
         ByteString writer = (ByteString) properties.get(WRITER);
-        int value = (int) properties.get(REAL_VALUE);
-        int vi = (int) properties.get(VI);
+        int value = (int) properties.get(VALUE);
+        int vi = (int) properties.get(VOLATILITY);
         boolean safe = (boolean) properties.get(SAFE);
 
         TokenProperties tokenProps = new TokenProperties(tokenId, name, img, desc, uri, strike, type, writer,
@@ -732,7 +800,7 @@ public class CandefiNFT {
     }
 
     private static String getImageBaseURI() {
-        return Storage.getString(ctx, imageBaseUriKey);
+        return Storage.getString(ctx.asReadOnly(), imageBaseUriKey);
     }
 
     private static int getBalanceOf(Hash160 owner) {
@@ -743,97 +811,108 @@ public class CandefiNFT {
     }
 
     private static void incrementCurrentSupplyByOne() {
-        int updatedCurrentSupply = Storage.getIntOrZero(ctx, currentSupplyKey) + 1;
+        int updatedCurrentSupply = currentSupply() + 1;
         Storage.put(ctx, currentSupplyKey, updatedCurrentSupply);
+    }
+
+    private static void fireErrorAndAbort(String msg) {
+        onError.fire(msg);
+        Helper.abort();
     }
 
     /* PERMISSION CHECKS */
 
-    private static void onlyOwner() throws Exception {
+    private static void onlyOwner() {
         if (!Runtime.checkWitness(contractOwner())) {
-            throw new Exception("onlyOwner");
+            fireErrorAndAbort("onlyOwner");
+        }
+    }
+
+    private static void onlyRentfuse() {
+        if (!Runtime.checkWitness(rentfuseContract())) {
+            fireErrorAndAbort("onlyRentfuse");
         }
     }
 
     /* OWNER ONLY METHODS */
 
-    public static void updateImageBaseURI(String uri) throws Exception {
+    public static void updateImageBaseURI(String uri) {
         onlyOwner();
+        if (uri.length() < 5) {
+            fireErrorAndAbort("updateImageBaseURI_invalidUri");
+        }
         Storage.put(ctx, imageBaseUriKey, uri);
     }
 
-    public static void updatePause(boolean paused) throws Exception {
+    public static void updatePause(boolean paused) {
         onlyOwner();
         Storage.put(ctx, isPausedKey, paused ? 1 : 0);
     }
 
-    public static void updateMinStake(int minStake) throws Exception {
+    public static void updateCandyMinStake(int candyMinStake) {
         onlyOwner();
-        if (minStake < 5000) {
-            throw new Exception("updateMinStake_invalidAmount");
+        if (candyMinStake < 5000_000000000L) {
+            fireErrorAndAbort("updateCandyMinStake_invalidMinStake");
         }
-        Storage.put(ctx, minStakeKey, minStake);
+        Storage.put(ctx, candyMinStakeKey, candyMinStake);
     }
 
-    public static void updateProtocolFee(int fee) throws Exception {
+    public static void updateCandyProtocolFee(int candyFee) {
         onlyOwner();
-        if (fee < 0) {
-            throw new Exception("updateProtocolFee_invalidAmount");
+        if (candyFee < 0) {
+            fireErrorAndAbort("updateCandyProtocolFee_invalidCandyFee");
         }
-        Storage.put(ctx, protocolFeeKey, fee);
+        Storage.put(ctx, candyProtocolFeeKey, candyFee);
     }
 
     /* CONTRACT MANAGEMENT */
 
     @OnDeployment
-    public static void deploy(Object data, boolean update) throws Exception {
+    public static void deploy(Object data, boolean update) {
         if (!update) {
             Object[] arr = (Object[]) data;
-
             Hash160 owner = (Hash160) arr[0];
-            if (!Hash160.isValid(owner)) {
-                throw new Exception("deploy_invalidOwner");
+            if (!Hash160.isValid(owner) || owner == Hash160.zero()) {
+                fireErrorAndAbort("deploy_invalidOwner");
             }
             Storage.put(ctx, ownerkey, owner);
 
             Hash160 candyHash = (Hash160) arr[1];
-            if (!Hash160.isValid(candyHash)) {
-                throw new Exception("deploy_invalidCandyHash");
+            if (!Hash160.isValid(candyHash) || candyHash == Hash160.zero()) {
+                fireErrorAndAbort("deploy_invalidCandyHash");
             }
             Storage.put(ctx, candyContractHashKey, candyHash);
 
             String imageBaseURI = (String) arr[2];
-            if (imageBaseURI.length() == 0) {
-                throw new Exception("deploy_invalidImageBaseURI");
+            if (imageBaseURI.length() < 5) {
+                fireErrorAndAbort("deploy_invalidImageBaseURI");
             }
             Storage.put(ctx, imageBaseUriKey, imageBaseURI);
 
-            Storage.put(ctx, isPausedKey, (int) arr[3]);
-
-            String oracleEndpoint = (String) arr[4];
-            if (oracleEndpoint.length() == 0) {
-                throw new Exception("deploy_oracleEndpoint");
+            String oracleEndpoint = (String) arr[3];
+            if (oracleEndpoint.length() < 5) {
+                fireErrorAndAbort("deploy_invalidOracleEndpoint");
             }
             Storage.put(ctx, oracleEndpointKey, oracleEndpoint);
 
-            int protocolFee = (int) arr[5];
-            if (protocolFee < 0) {
-                throw new Exception("deploy_protocolFee");
+            int candyProtocolFee = (int) arr[4];
+            if (candyProtocolFee < 0) {
+                fireErrorAndAbort("deploy_invalidCandyProtocolFee");
             }
-            Storage.put(ctx, protocolFeeKey, protocolFee);
+            Storage.put(ctx, candyProtocolFeeKey, candyProtocolFee);
 
-            int minStake = (int) arr[6];
-            // too low value, does not make sense
-            if (minStake < 100) {
-                throw new Exception("deploy_minStake");
+            int candyMinStake = (int) arr[5];
+            if (candyMinStake < 5000_000000000L) {
+                fireErrorAndAbort("deploy_invalidCandyMinStake");
             }
-            Storage.put(ctx, minStakeKey, minStake);
+            Storage.put(ctx, candyMinStakeKey, candyMinStake);
 
-            Hash160 rentfuse = (Hash160) arr[7];
-            if (!Hash160.isValid(rentfuse)) {
-                throw new Exception("deploy_invalidRentfuseHash");
+            Hash160 rentfuse = (Hash160) arr[6];
+            if (!Hash160.isValid(rentfuse) || rentfuse == Hash160.zero()) {
+                fireErrorAndAbort("deploy_invalidRentfuseHash");
             }
             Storage.put(ctx, rentfuseScriptHashKey, rentfuse);
+            Storage.put(ctx, isPausedKey, 1);
         }
     }
 
@@ -844,42 +923,4 @@ public class CandefiNFT {
         }
         ContractManagement.update(script, manifest);
     }
-
-    @io.neow3j.devpack.annotations.Struct
-    static class TokenProperties {
-
-        public ByteString tokenId;
-        public String name;
-        public String image;
-        public String description;
-        public String tokenUri;
-        public int strike;
-        public int type;
-        public ByteString writer;
-        public int vdot;
-        public int created;
-        public int value;
-        public int vi;
-        public boolean safe;
-
-        // add getters
-
-        public TokenProperties(ByteString tokenId, String name, String image, String description, String tokenUri,
-                int strike, int type, ByteString writer, int vdot, int created, int value, int vi, boolean safe) {
-            this.tokenId = tokenId;
-            this.name = name;
-            this.image = image;
-            this.description = description;
-            this.tokenUri = tokenUri;
-            this.strike = strike;
-            this.type = type;
-            this.writer = writer;
-            this.vdot = vdot;
-            this.created = created;
-            this.value = value;
-            this.vi = vi;
-            this.safe = safe;
-        }
-    }
-
 }
