@@ -17,12 +17,13 @@ import io.neow3j.devpack.annotations.Permission;
 import io.neow3j.devpack.annotations.OnDeployment;
 import io.neow3j.devpack.annotations.OnNEP17Payment;
 import io.neow3j.devpack.annotations.Safe;
+import io.neow3j.devpack.annotations.SupportedStandard;
 import io.neow3j.devpack.constants.CallFlags;
 import io.neow3j.devpack.constants.FindOptions;
 import io.neow3j.devpack.constants.NativeContract;
+import io.neow3j.devpack.constants.NeoStandard;
 import io.neow3j.devpack.contracts.ContractManagement;
 import io.neow3j.devpack.contracts.StdLib;
-import io.neow3j.devpack.events.Event2Args;
 import io.neow3j.devpack.events.Event3Args;
 import io.neow3j.devpack.events.Event4Args;
 
@@ -30,12 +31,10 @@ import static io.neocandy.games.candyclash.CandyClashUtils.createStorageMapPrefi
 
 @Permission(contract = "*", methods = { "onNEP11Payment", "transfer" })
 @Permission(nativeContract = NativeContract.ContractManagement)
+@SupportedStandard(neoStandard = NeoStandard.NEP_11)
 public class NFTTemplate {
 
     // EVENTS
-
-    @DisplayName("Mint")
-    private static Event2Args<Hash160, ByteString> onMint;
 
     @DisplayName("Transfer")
     static Event4Args<Hash160, Hash160, Integer, ByteString> onTransfer;
@@ -62,21 +61,15 @@ public class NFTTemplate {
     private static final String ATTRIBUTE_VALUE = "value";
     private static final String ATTRIBUTE_DISPLAY_TYPE = "display_type";
 
-    // ROYALTIES
-    private static final String ROYALTIES_ADDRESS = "address";
-    private static final String ROYALTIES_VALUE = "value";
-
     private static final StorageContext ctx = Storage.getStorageContext();
 
     // STORAGE KEYS
     private static final byte[] ownerkey = Helper.toByteArray((byte) 1);
-    private static final byte[] maxSupplyKey = Helper.toByteArray((byte) 2);
+    private static final byte[] totalSupplyKey = Helper.toByteArray((byte) 2);
     private static final byte[] tokensOfKey = Helper.toByteArray((byte) 3);
     private static final byte[] imageBaseUriKey = Helper.toByteArray((byte) 4);
     private static final byte[] currentSupplyKey = Helper.toByteArray((byte) 5);
     private static final byte[] isPausedKey = Helper.toByteArray((byte) 6);
-    private static final byte[] royaltiesReceiverKey = Helper.toByteArray((byte) 7);
-    private static final byte[] royaltiesAmountKey = Helper.toByteArray((byte) 8);
 
     // STORAGE MAPS
     private static final StorageMap tokens = new StorageMap(ctx, Helper.toByteArray((byte) 101));
@@ -92,10 +85,8 @@ public class NFTTemplate {
         if (amount <= 0) {
             throw new Exception("onPayment_invalidAmount");
         }
-        Hash160 token = Runtime.getCallingScriptHash();
-
         if (data == null) {
-            if (currentSupply() >= maxSupply()) {
+            if (currentSupply() >= totalSupply()) {
                 throw new Exception("onPayment_soldOut");
             }
         }
@@ -109,22 +100,6 @@ public class NFTTemplate {
         return new Hash160(Storage.get(ctx, ownerkey));
     }
 
-    /**
-     * Required by NFT marketplaces that support royalties.
-     * 
-     * @return royalties data with receiverAddress and royaltiesAmount.
-     */
-    @Safe
-    public static String getRoyalties() {
-        String receiverAddress = Storage.getString(ctx, royaltiesReceiverKey);
-        int amount = Storage.getInt(ctx, royaltiesAmountKey);
-        Map<String, Object> map = new Map<>();
-        map.put(ROYALTIES_ADDRESS, receiverAddress);
-        map.put(ROYALTIES_VALUE, StdLib.jsonSerialize(amount));
-        Object[] arr = new Object[] { map };
-        return StdLib.jsonSerialize(arr);
-    }
-
     @Safe
     public static String symbol() {
         return "TEMPLATE";
@@ -136,8 +111,8 @@ public class NFTTemplate {
     }
 
     @Safe
-    public static int maxSupply() {
-        return Storage.getInt(ctx, maxSupplyKey);
+    public static int totalSupply() {
+        return Storage.getInt(ctx.asReadOnly(), totalSupplyKey);
     }
 
     @Safe
@@ -147,12 +122,12 @@ public class NFTTemplate {
 
     @Safe
     public static int currentSupply() {
-        return Storage.getIntOrZero(ctx, currentSupplyKey);
+        return Storage.getIntOrZero(ctx.asReadOnly(), currentSupplyKey);
     }
 
     @Safe
     public static boolean isPaused() {
-        return Storage.getInt(ctx, isPausedKey) == 1;
+        return Storage.getInt(ctx.asReadOnly(), isPausedKey) == 1;
     }
 
     @Safe
@@ -263,7 +238,7 @@ public class NFTTemplate {
         ownerOfMap.put(tokenId, owner);
         new StorageMap(ctx, createStorageMapPrefix(owner, tokensOfKey)).put(tokenId, 1);
         incrementBalanceByOne(owner);
-        onMint.fire(owner, tokenId);
+        onTransfer.fire(null, owner, 1, tokenId);
     }
 
     private static void saveProperties(Map<String, Object> properties, ByteString tokenId) throws Exception {
@@ -321,7 +296,7 @@ public class NFTTemplate {
     }
 
     private static void incrementCurrentSupplyByOne() {
-        int updatedCurrentSupply = Storage.getInt(ctx, currentSupplyKey) + 1;
+        int updatedCurrentSupply = Storage.getInt(ctx.asReadOnly(), currentSupplyKey) + 1;
         Storage.put(ctx, currentSupplyKey, updatedCurrentSupply);
     }
 
@@ -345,7 +320,7 @@ public class NFTTemplate {
         if (amount < currentSupply() || amount <= 0) {
             throw new Exception("updateMaxSupply_invalidAmount");
         }
-        Storage.put(ctx, maxSupplyKey, amount);
+        Storage.put(ctx, totalSupplyKey, amount);
     }
 
     public static void updatePause(boolean paused) throws Exception {
@@ -376,21 +351,8 @@ public class NFTTemplate {
             if (maxSupply < 1) {
                 throw new Exception("deploy_maxSupply");
             }
-            Storage.put(ctx, maxSupplyKey, maxSupply);
-
-            Storage.put(ctx, isPausedKey, (int) arr[5]);
-
-            String royaltiesReceiverAddress = (String) arr[6];
-            if (royaltiesReceiverAddress.length() == 0) {
-                throw new Exception("deploy_royaltiesReceiverAddress ");
-            }
-            Storage.put(ctx, royaltiesReceiverKey, royaltiesReceiverAddress);
-
-            int royaltiesAmount = (int) arr[7];
-            if (royaltiesAmount <= 0) {
-                throw new Exception("deploy_royaltiesAmount");
-            }
-            Storage.put(ctx, royaltiesAmountKey, royaltiesAmount);
+            Storage.put(ctx, totalSupplyKey, maxSupply);
+            Storage.put(ctx, isPausedKey, 1);
         }
     }
 

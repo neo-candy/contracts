@@ -69,7 +69,7 @@ public class LollipopNFT {
 
     // STORAGE KEYS
     private static final byte[] ownerKey = Helper.toByteArray((byte) 5);
-    private static final byte[] maxSupplyKey = Helper.toByteArray((byte) 6);
+    private static final byte[] totalSupplyKey = Helper.toByteArray((byte) 6);
     private static final byte[] candyContractHashKey = Helper.toByteArray((byte) 7);
     private static final byte[] tokensOfKey = Helper.toByteArray((byte) 8);
     private static final byte[] imageBaseUriKey = Helper.toByteArray((byte) 9);
@@ -123,8 +123,8 @@ public class LollipopNFT {
     }
 
     @Safe
-    public static int maxSupply() {
-        return Storage.getInt(ctx.asReadOnly(), maxSupplyKey);
+    public static int totalSupply() {
+        return Storage.getInt(ctx.asReadOnly(), totalSupplyKey);
     }
 
     @Safe
@@ -283,7 +283,7 @@ public class LollipopNFT {
     }
 
     private static void mint(Hash160 owner) throws Exception {
-        if (currentSupply() >= maxSupply()) {
+        if (currentSupply() >= totalSupply()) {
             throw new Exception("onPayment_soldOut");
         }
         int currentSupply = currentSupply();
@@ -414,7 +414,7 @@ public class LollipopNFT {
                 throw new Exception("deploy_invalidImageBaseURI");
             }
             Storage.put(ctx, imageBaseUriKey, imageBaseURI);
-            Storage.put(ctx, maxSupplyKey, 222);
+            Storage.put(ctx, totalSupplyKey, 222);
             Storage.put(ctx, isPausedKey, 1);
 
             for (int i = 0; i < 22; i++) {
